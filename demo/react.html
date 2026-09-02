@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>semantic-font — the React component, no build step</title>
+
+<!-- A plain static page: no bundler, no JSX transform, no server. The one
+     piece of plumbing a page like this needs is an import map, because
+     SemanticText.js imports 'react' as a bare specifier. Swap these URLs for
+     your own copies of React to run it offline; inside a bundler, delete the
+     import map and nothing else changes. -->
+<script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+    }
+  }
+</script>
+
+<style>
+  body {
+    font: 20px/1.6 ui-sans-serif, system-ui, sans-serif;
+    max-width: 36rem; margin: 4rem auto; padding: 0 1.2rem;
+    color: #16181d; background: #fbfaf8;
+  }
+  @media (prefers-color-scheme: dark) { body { color: #e8e6e1; background: #14161a; } }
+  h2 { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; opacity: .6; margin: 2.5rem 0 .2rem; }
+</style>
+
+<h2>colour only</h2>
+<div id="valence-only"></div>
+
+<h2>weight only</h2>
+<div id="salience-only"></div>
+
+<h2>all four channels</h2>
+<div id="everything"></div>
+
+<script type="module">
+  import { createElement as h } from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { SemanticText } from '../src/SemanticText.js';
+
+  const text = 'The migration ran clean on staging. In production it deleted the '
+    + 'index, and the rollback failed too. Nobody lost data, but the postmortem '
+    + 'is going to be painful.';
+
+  // Each channel is independent: name the ones you want and the rest emit
+  // nothing at all — one CSS property per mount, not a disabled-but-present one.
+  const mounts = {
+    'valence-only': { channels: ['valence'] },
+    'salience-only': { channels: ['salience'] },
+    'everything': {},
+  };
+
+  for (const [id, props] of Object.entries(mounts)) {
+    createRoot(document.getElementById(id))
+      .render(h(SemanticText, { text, as: 'p', ...props }));
+  }
+</script>

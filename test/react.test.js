@@ -58,3 +58,22 @@ if (renderToStaticMarkup) {
     assert.equal(render({}), '<span></span>');
   });
 }
+
+if (renderToStaticMarkup) {
+  test('a single channel emits exactly one property', () => {
+    const text = 'The migration ran clean. In production it deleted the index.';
+    const colour = render({ text, channels: ['valence'] });
+    assert.ok(colour.includes('color-mix'));
+    assert.ok(!colour.includes('font-weight') && !colour.includes('font-size'));
+
+    const weight = render({ text, channels: ['salience'] });
+    assert.ok(weight.includes('font-weight'));
+    assert.ok(!weight.includes('color-mix'));
+  });
+
+  test('a theme can switch an axis off without touching the channel', () => {
+    const text = 'WARNING: this deletes production data.';
+    assert.ok(render({ text }).includes('font-size'));
+    assert.ok(!render({ text, theme: { size: { range: 0 } } }).includes('font-size'));
+  });
+}

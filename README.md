@@ -81,6 +81,64 @@ Teach it your vocabulary with a lexicon:
 />
 ```
 
+## Taking only the part you want
+
+The four channels are independent all the way down, and there are four places
+to cut, from coarsest to finest.
+
+**Pick channels.** Nothing but colour:
+
+```jsx
+<SemanticText text={incident} channels={['valence']} />
+```
+
+Every other channel scores 0 and emits nothing — the spans carry one CSS
+property, not a disabled-but-present one. `demo/react.html` mounts the same
+paragraph three times this way.
+
+**Pick axes.** A channel's typography is theme data, so weight without the
+size change is a theme, not a fork:
+
+```jsx
+<SemanticText theme={{ size: { range: 0 } }} text={incident} />
+```
+
+`color: null` and `highlight: null` switch those off the same way — that is
+all `monochrome` is.
+
+**Keep the scores, render it yourself.** `useSemanticText` hands back the
+tokens and runs, so the styling can be your own classes, a `<mark>`, an
+ARIA annotation, a minimap, anything.
+
+**Or skip the typography entirely.** `analyze(text)` is the engine alone: no
+React, no CSS, four numbers per token. It is also useful as a plain text
+signal — sorting a log by salience, flagging hedged sentences in review.
+
+## As a static site
+
+Everything is client-side; there is no server component to any of it.
+
+`src/analyze.js` and `src/theme.js` import nothing at all, so a static page
+can load them directly — that is exactly what `demo/index.html` does, and it
+needs only a file server (`python3 -m http.server`, GitHub Pages, an S3
+bucket). ES modules do need HTTP rather than `file://`.
+
+`SemanticText.js` imports `react` as a bare specifier. Inside any bundler or
+static-site generator that resolves itself. In a page with no bundler, one
+import map is the whole setup:
+
+```html
+<script type="importmap">
+  { "imports": { "react": "https://esm.sh/react@18.3.1",
+                 "react-dom/client": "https://esm.sh/react-dom@18.3.1/client" } }
+</script>
+```
+
+See `demo/react.html`, which runs the component with no build step of any
+kind. And because `analyze()` is synchronous and pure, the component renders
+under `renderToStaticMarkup` — so a static site can prerender the typography
+into the HTML and ship no JavaScript at all.
+
 ## Themes
 
 `editorial` is deliberately quiet: high thresholds, small ranges, most words
