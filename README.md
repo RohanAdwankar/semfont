@@ -7,7 +7,7 @@ hedged things lean — and nothing in the pipeline is a model.
 Idea: [#1455](https://github.com/drapoz/0/issues/1455).
 
 ```jsx
-import { SemanticText } from 'semantic-font';
+import { SemanticText } from 'semfont';
 
 <SemanticText as="p">
   The migration ran clean on staging. In production it deleted the index,
@@ -52,7 +52,7 @@ topic terms of a paragraph float up without anyone tagging them.
 ## API
 
 ```js
-import { SemanticText, useSemanticText, analyze, themes, styleFor } from 'semantic-font';
+import { SemanticText, useSemanticText, analyze, themes, styleFor } from 'semfont';
 ```
 
 `<SemanticText>` props:

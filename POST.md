@@ -4,7 +4,7 @@ Every emphasis in your document is a lie you told by hand. You bolded the
 word because it mattered — but the file only records the bold, not the
 mattering. Change the sentence and the emphasis stays where it was.
 
-`semantic-font` inverts that. You hand it plain text; it decides the
+`semfont` inverts that. You hand it plain text; it decides the
 typography from what the text means:
 
 > The migration ran clean on staging. In production it **deleted** the index,
@@ -126,5 +126,5 @@ It would also never be a font.
 
 ---
 
-Code, demo and tests: `projects/semantic-font/` — idea
+Code, demo and tests: [drapoz/semfont](https://github.com/drapoz/semfont) — idea
 [#1455](https://github.com/drapoz/0/issues/1455).
