@@ -3,16 +3,18 @@
 // skipped when they are not present.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createElement } from 'react';
 
-let renderToStaticMarkup;
+// Every import here is dynamic, including React's own: a static one would
+// throw at module load in a fresh clone and fail the file rather than skip it.
+let createElement, renderToStaticMarkup, SemanticText;
 try {
+  ({ createElement } = await import('react'));
   ({ renderToStaticMarkup } = await import('react-dom/server'));
+  ({ SemanticText } = await import('../src/SemanticText.js'));
 } catch {
-  test('react binding', { skip: 'react-dom not installed' }, () => {});
+  test('the React binding', { skip: 'react and react-dom are not installed' }, () => {});
 }
 
-const { SemanticText } = await import('../src/SemanticText.js');
 const render = (props) => renderToStaticMarkup(createElement(SemanticText, props));
 
 if (renderToStaticMarkup) {
