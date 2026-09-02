@@ -1,0 +1,175 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>semantic font</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,slnt,wght@8..144,-10..0,100..1000&display=swap">
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: #16181d;
+    --paper: #fbfaf8;
+    --rule: #d9d5cd;
+    --dim: #6c6a66;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e6e1; --paper: #14161a; --rule: #2c3037; --dim: #8e8c88; }
+  }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Roboto Flex', system-ui, sans-serif;
+    font-variation-settings: 'opsz' 24;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 17rem;
+    gap: 2.5rem;
+    padding: 2.5rem clamp(1rem, 5vw, 4rem);
+    align-items: start;
+  }
+  @media (max-width: 800px) { body { grid-template-columns: 1fr; } }
+  h1 { font-size: 1.05rem; font-weight: 500; letter-spacing: .01em; margin: 0 0 1.5rem; color: var(--dim); }
+  #stage {
+    font-size: clamp(1.35rem, 2.6vw, 1.9rem);
+    line-height: 1.55;
+    min-height: 8em;
+    white-space: pre-wrap;
+  }
+  textarea {
+    width: 100%; box-sizing: border-box; margin-top: 2rem; padding: .8rem;
+    background: transparent; color: var(--dim); border: 1px solid var(--rule);
+    border-radius: .4rem; font: inherit; font-size: .85rem; line-height: 1.5;
+    resize: vertical; min-height: 6rem;
+  }
+  aside { font-size: .8rem; color: var(--dim); position: sticky; top: 2.5rem; }
+  aside section { border-top: 1px solid var(--rule); padding: .9rem 0; }
+  aside h2 { font-size: .7rem; text-transform: uppercase; letter-spacing: .09em; margin: 0 0 .6rem; }
+  label { display: flex; align-items: center; gap: .5rem; padding: .15rem 0; }
+  input[type=range] { width: 100%; }
+  button {
+    display: block; width: 100%; text-align: left; background: none; color: inherit;
+    border: 0; border-radius: .3rem; padding: .3rem .4rem; font: inherit; cursor: pointer;
+  }
+  button:hover { background: color-mix(in oklab, transparent, currentColor 10%); }
+  #readout { font-variant-numeric: tabular-nums; line-height: 1.7; }
+</style>
+
+<main>
+  <h1>semantic font — typography that modulates on meaning</h1>
+  <div id="stage"></div>
+  <textarea id="input" spellcheck="false" aria-label="source text"></textarea>
+</main>
+
+<aside>
+  <section>
+    <h2>samples</h2>
+    <div id="samples"></div>
+  </section>
+  <section>
+    <h2>theme</h2>
+    <label><input type="radio" name="theme" value="editorial" checked> editorial</label>
+    <label><input type="radio" name="theme" value="loud"> loud</label>
+    <label><input type="radio" name="theme" value="monochrome"> monochrome</label>
+  </section>
+  <section>
+    <h2>channels</h2>
+    <label><input type="checkbox" data-channel="valence" checked> valence → colour</label>
+    <label><input type="checkbox" data-channel="salience" checked> salience → weight, size</label>
+    <label><input type="checkbox" data-channel="surprise" checked> surprise → highlight</label>
+    <label><input type="checkbox" data-channel="certainty" checked> certainty → slant</label>
+  </section>
+  <section>
+    <h2>sensitivity</h2>
+    <input id="sensitivity" type="range" min="0.2" max="2" step="0.05" value="1">
+  </section>
+  <section>
+    <h2>passage</h2>
+    <div id="readout"></div>
+  </section>
+</aside>
+
+<script type="module">
+  import { analyze, summarize } from '../src/analyze.js';
+  import { styleFor, themes } from '../src/theme.js';
+
+  const SAMPLES = {
+    'incident report':
+      "The migration ran clean on staging. In production it deleted the index, and the "
+      + "rollback failed too. Recovery took 40 minutes. Nobody lost data, but the postmortem "
+      + "is going to be painful.",
+    'a hedged review':
+      "I think this might be the culprit, though honestly the profiler output is unreadable. "
+      + "Maybe the allocator is fine and we are chasing noise. The regression is definitely "
+      + "real: p99 doubled on Tuesday and never came back.",
+    'a dangerous command':
+      "WARNING: this operation is irreversible. It will drop 1.2TB of production user data "
+      + "immediately and there is no undo. Type the cluster name to continue.",
+    'release notes':
+      "The new scheduler shipped on Tuesday. Startup is 40% faster, the config parser is "
+      + "simpler, and the old crash on reload is fixed. One known bug: watch mode still "
+      + "leaks file descriptors on very large trees.",
+    'the same sentence, negated':
+      "The launch was great and the numbers were excellent. The launch was not great and "
+      + "the numbers were not excellent at all.",
+  };
+
+  const stage = document.getElementById('stage');
+  const input = document.getElementById('input');
+  const readout = document.getElementById('readout');
+  const sensitivity = document.getElementById('sensitivity');
+
+  for (const name of Object.keys(SAMPLES)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { input.value = SAMPLES[name]; render(); };
+    document.getElementById('samples').append(b);
+  }
+
+  function options() {
+    const channels = [...document.querySelectorAll('[data-channel]')]
+      .filter((c) => c.checked).map((c) => c.dataset.channel);
+    const theme = themes[document.querySelector('[name=theme]:checked').value];
+    return { channels, theme, sensitivity: Number(sensitivity.value) };
+  }
+
+  // The same three lines the React component runs: analyze, style, render.
+  // Here they drive DOM nodes directly so the demo needs no build step.
+  function render() {
+    const { channels, theme, sensitivity: gain } = options();
+    const result = analyze(input.value, { sensitivity: gain });
+    stage.replaceChildren();
+
+    for (const token of result.tokens) {
+      for (const c of ['valence', 'salience', 'surprise', 'certainty']) {
+        if (!channels.includes(c)) token[c] = 0;
+      }
+      const styled = styleFor(token, theme);
+      if (!styled) { stage.append(token.text); continue; }
+      const span = document.createElement('span');
+      Object.assign(span.style, styled.style);
+      span.title = `valence ${token.valence.toFixed(2)} · salience ${token.salience.toFixed(2)}`
+        + ` · surprise ${token.surprise.toFixed(2)} · certainty ${token.certainty.toFixed(2)}`;
+      span.textContent = token.text;
+      stage.append(span);
+    }
+
+    const s = summarize(result);
+    readout.textContent = '';
+    for (const [k, v] of Object.entries(s)) {
+      if (k === 'loudest') continue;
+      const row = document.createElement('div');
+      row.textContent = `${k.padEnd(10)} ${v >= 0 ? ' ' : ''}${v.toFixed(3)}`;
+      readout.append(row);
+    }
+    const loud = document.createElement('div');
+    loud.style.marginTop = '.5rem';
+    loud.textContent = 'loudest: ' + (s.loudest ?? []).join(', ');
+    readout.append(loud);
+  }
+
+  document.addEventListener('input', render);
+  document.addEventListener('change', render);
+  input.value = SAMPLES['incident report'];
+  render();
+</script>
