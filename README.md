@@ -2,7 +2,7 @@
 
 Typography that modulates on meaning instead of on markup. Negative things
 render red, important things get heavier, surprising things get highlighted,
-hedged things lean — and nothing in the pipeline is a model.
+hedged things lean, and nothing in the pipeline is a model.
 
 Idea: [#1455](https://github.com/drapoz/0/issues/1455).
 
@@ -25,7 +25,7 @@ Because typography has to keep up with typing. `analyze()` is a pure
 synchronous function over lexicons and local rules: about a millisecond for a
 page of prose, no network, no key, no async, nothing leaving the browser, and
 the same input always gives the same output. That is what makes it usable as
-a *font* rather than as a feature — it can run on every keystroke, in a
+a *font* rather than as a feature: it can run on every keystroke, in a
 `useMemo`, during SSR, on a plane.
 
 An LLM would read sarcasm better. It could not run 60 times a second inside a
@@ -46,7 +46,7 @@ they compose instead of collide:
 Two rules do most of the work. **Negation flips and damps**: `not great` is
 mildly negative, not the mirror image of `great`. **Rarity is relative to the
 passage**: a word is only remarkable next to the company it keeps, so the
-threshold comes from this text, not from a global corpus — which is how the
+threshold comes from this text rather than from a global corpus, which is how the
 topic terms of a paragraph float up without anyone tagging them.
 
 ## API
@@ -59,18 +59,18 @@ import { SemanticText, useSemanticText, analyze, themes, styleFor } from 'semfon
 
 | prop | default | |
 |---|---|---|
-| `text` / `children` | — | the passage |
+| `text` / `children` | none | the passage |
 | `theme` | `'editorial'` | `'editorial'`, `'loud'`, `'monochrome'`, or a theme object |
 | `channels` | all four | which channels may style |
 | `sensitivity` | `1` | global gain on every score |
-| `lexicon` | — | extra entries per channel, merged over the defaults |
+| `lexicon` | none | extra entries per channel, merged over the defaults |
 | `as` | `'span'` | element to render |
 | `debug` | `false` | emit the scores as `data-*` attributes |
-| `onAnalyze` | — | passage-level readout |
+| `onAnalyze` | none | passage-level readout |
 
 `useSemanticText(text, options)` returns the scored tokens and the runs, for
-rendering it yourself. `analyze(text, options)` is the engine alone — no React
-— and `styleFor(token, theme)` is the mapping alone.
+rendering it yourself. `analyze(text, options)` is the engine alone, without
+React, and `styleFor(token, theme)` is the mapping alone.
 
 Teach it your vocabulary with a lexicon:
 
@@ -103,7 +103,7 @@ size change is a theme, not a fork:
 <SemanticText theme={{ size: { range: 0 } }} text={incident} />
 ```
 
-`color: null` and `highlight: null` switch those off the same way — that is
+`color: null` and `highlight: null` switch those off the same way. That is
 all `monochrome` is.
 
 **Keep the scores, render it yourself.** `useSemanticText` hands back the
@@ -112,14 +112,14 @@ ARIA annotation, a minimap, anything.
 
 **Or skip the typography entirely.** `analyze(text)` is the engine alone: no
 React, no CSS, four numbers per token. It is also useful as a plain text
-signal — sorting a log by salience, flagging hedged sentences in review.
+signal: sorting a log by salience, flagging hedged sentences in review.
 
 ## As a static site
 
 Everything is client-side; there is no server component to any of it.
 
 `src/analyze.js` and `src/theme.js` import nothing at all, so a static page
-can load them directly — that is exactly what `demo/index.html` does, and it
+can load them directly, which is exactly what `demo/index.html` does, and it
 needs only a file server (`python3 -m http.server`, GitHub Pages, an S3
 bucket). ES modules do need HTTP rather than `file://`.
 
@@ -136,7 +136,7 @@ import map is the whole setup:
 
 See `demo/react.html`, which runs the component with no build step of any
 kind. And because `analyze()` is synchronous and pure, the component renders
-under `renderToStaticMarkup` — so a static site can prerender the typography
+under `renderToStaticMarkup`, so a static site can prerender the typography
 into the HTML and ship no JavaScript at all.
 
 ## Themes
@@ -144,7 +144,7 @@ into the HTML and ship no JavaScript at all.
 `editorial` is deliberately quiet: high thresholds, small ranges, most words
 left completely alone. If every word is styled, none of them is emphasised.
 `loud` turns the same scores up for a headline or a demo. `monochrome` emits
-no colour at all — weight, size and slant carry all four channels, for print,
+no colour at all: weight, size and slant carry all four channels, for print,
 e-ink, and for the fact that colour alone is not an accessible channel.
 
 ## The post
@@ -153,7 +153,7 @@ e-ink, and for the fact that colour alone is not an accessible channel.
 every word of the prose is scored and styled at load, the rail re-runs the
 whole page when you change a channel, the sensitivity or the theme, and the box
 at the top takes the reader's own text. It imports `src/` directly, so there is
-no copy of the engine to keep in sync and no build step — serve the repo and
+no copy of the engine to keep in sync and no build step. Serve the repo and
 open `/`, or turn on GitHub Pages for `main` to publish it as-is. `POST.md` is
 the same words in plain Markdown.
 
@@ -168,13 +168,13 @@ python3 -m http.server          # then open / for the post, /demo/ for the demo
 The demo is the fastest way to see it: five sample passages, live editing,
 per-channel toggles, and a hover readout of every score.
 
-`src/` has no dependencies and no build step — it is ESM that runs in Node and
+`src/` has no dependencies and no build step. It is ESM that runs in Node and
 in the browser as-is, using `createElement` rather than JSX so it needs no
 transform. React is a peer, and only `SemanticText.js` imports it.
 
 ## What it gets wrong
 
-Sarcasm, irony, and domain jargon it has not been taught — the lexicons are a
+Sarcasm, irony, and domain jargon it has not been taught. The lexicons are a
 few hundred entries, so anything specialised needs a `lexicon` prop. It scores
 English only. And it reads words, not arguments: it will not notice that a
 calm sentence is describing a catastrophe.

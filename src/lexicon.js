@@ -113,7 +113,7 @@ const LOG_FLOOR = Math.log(120);
 const LOG_CEIL = Math.log(OOV_RANK);
 
 // Just enough morphology that the tables can stay small. A lexicon of stems
-// covers "fails", "failing" and "failed" without three entries each — and
+// covers "fails", "failing" and "failed" without three entries each, and
 // without a stemmer library, which would be the only dependency in the repo.
 const SUFFIXES = [
   ['ally', ''], ['ically', ''], ['ically', 'e'], ['iness', 'y'], ['ness', ''],
@@ -139,7 +139,7 @@ export function stems(word) {
 
 /**
  * Look a word up in a channel table, falling back to its stems. A derived
- * form is damped slightly — "failure" is a touch cooler than "fail".
+ * form is damped slightly: "failure" is a touch cooler than "fail".
  */
 export function lookup(table, word) {
   const exact = table[word];

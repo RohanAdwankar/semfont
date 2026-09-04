@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>semfont — the React component, no build step</title>
+<title>semfont: the React component, no build step</title>
 
 <!-- A plain static page: no bundler, no JSX transform, no server. The one
      piece of plumbing a page like this needs is an import map, because
@@ -45,7 +45,7 @@
     + 'is going to be painful.';
 
   // Each channel is independent: name the ones you want and the rest emit
-  // nothing at all — one CSS property per mount, not a disabled-but-present one.
+  // nothing at all, so each mount carries exactly one CSS property.
   const mounts = {
     'valence-only': { channels: ['valence'] },
     'salience-only': { channels: ['salience'] },

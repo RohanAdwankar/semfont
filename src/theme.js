@@ -2,7 +2,7 @@
 //
 // A theme is data: thresholds below which a token is left completely alone,
 // and the range each channel is allowed to move its axis through. Restraint
-// is the whole design — if every word is styled, none of them is emphasised,
+// is the whole design: if every word is styled, none of them is emphasised,
 // so the thresholds are deliberately high and the ranges deliberately small.
 //
 // Colour is expressed with color-mix against `currentColor`, so the text

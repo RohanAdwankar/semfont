@@ -101,7 +101,7 @@ export function analyze(text, options = {}) {
   const sentences = segment(tokens);
   const content = tokens.filter(isContent);
 
-  // Pass 1 — rarity, repetition, and the passage's own baseline. A word is
+  // Pass 1: rarity, repetition, and the passage's own baseline. A word is
   // only remarkable relative to the company it keeps, so the threshold for
   // "rare here" comes from this passage rather than from the rank list.
   const counts = new Map();
@@ -113,7 +113,7 @@ export function analyze(text, options = {}) {
     ? content.reduce((a, t) => a + t.rarity, 0) / content.length
     : 0;
 
-  // Pass 2 — sentence certainty, so a hedge colours its whole clause.
+  // Pass 2: sentence certainty, so a hedge colours its whole clause.
   for (const t of content) {
     const c = lookup(certainty, t.norm);
     if (c !== undefined) {
@@ -126,7 +126,7 @@ export function analyze(text, options = {}) {
     if (s.questioned) s.certainty -= 0.25;
   }
 
-  // Pass 3 — per token.
+  // Pass 3: per token.
   let contrastDistance = Infinity;
   let contrastSentence = -1;
   for (const t of tokens) {
@@ -155,7 +155,7 @@ export function analyze(text, options = {}) {
     if (shouty) gain *= 1.4;
     if (sentence.exclaimed) gain *= 1.15;
 
-    // valence, then negation flips it — "not great" is mildly bad, not the
+    // valence, then negation flips it. "not great" is mildly bad, not the
     // mirror image of great, hence the damping.
     let v = lookup(valence, t.norm) ?? 0;
     if (v !== 0) {
@@ -166,7 +166,7 @@ export function analyze(text, options = {}) {
     }
 
     // salience: asked for by the word, or earned by being this passage's
-    // subject — a rare word that keeps coming back is what the text is about.
+    // subject: a rare word that keeps coming back is what the text is about.
     const repeats = counts.get(t.norm) ?? 1;
     const repetition = 0.45 + 0.55 * Math.min(1, (repeats - 1) / 2);
     let sal = lookup(salience, t.norm) ?? 0;
@@ -178,8 +178,8 @@ export function analyze(text, options = {}) {
 
     // surprise: a marker, or the clause after a contrast conjunction, or a
     // word much rarer than its neighbours. Function words carry the grammar,
-    // not the news, so they are exempt from everything but the marker list —
-    // without this, "but the" lights up as brightly as what follows it.
+    // not the news, so they are exempt from everything but the marker list.
+    // Without this, "but the" lights up as brightly as what follows it.
     let sur = lookup(surprise, t.norm) ?? 0;
     if (t.rarity > FUNCTION_WORD_RARITY) {
       if (contrastDistance > 0 && contrastDistance <= 6) {

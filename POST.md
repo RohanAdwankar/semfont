@@ -54,7 +54,7 @@ it still separates a demo from something you would ship.
 
 Sending the paragraph to a model buys you sarcasm detection, at a few hundred
 milliseconds, an API key, a network, and a copy of the reader's draft on
-someone else's machine — per keystroke.
+someone else's machine, per keystroke.
 
 Four lexicons and about two hundred lines of rules score a page of prose in
 roughly a millisecond, synchronously, offline, with the same answer every time.
@@ -75,7 +75,7 @@ teach it your own vocabulary.
 ## Restraint
 
 The first version styled every word it had an opinion about and looked like a
-ransom note. The default thresholds now leave most words alone — a paragraph
+ransom note. The default thresholds now leave most words alone. A paragraph
 gets a handful. Emphasis works by contrast, so it exists only relative to text
 that nothing happened to.
 
@@ -91,4 +91,4 @@ A model beats it on all three, and could never be a font.
 
 ---
 
-[github.com/drapoz/semfont](https://github.com/drapoz/semfont) — MIT.
+[github.com/drapoz/semfont](https://github.com/drapoz/semfont). MIT.
