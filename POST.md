@@ -1,104 +1,69 @@
 # A font that reads what you wrote
 
-*The live version of this post is `index.html` — same words, but every
-specimen is rendered by the engine and the opening one is editable. Serve the
-repo and open it, or publish it with GitHub Pages.*
+*The live version of this post is `index.html`, where the engine sets every
+word as you read and the box at the top takes your own text. Serve the repo and
+open `/`, or publish it with GitHub Pages.*
 
-Every emphasis in your document is a lie you told by hand. You bolded the
-word because it mattered — but the file only records the bold, not the
-mattering. Change the sentence and the emphasis stays where it was.
+Every emphasis in your document is a claim you made by hand. The file keeps the
+bold and forgets the reason, so when the sentence changes, the emphasis stays
+where it was.
 
-`semfont` inverts that. You hand it plain text; it decides the
-typography from what the text means:
+semfont decides the typography from what the text means. Nothing here was
+marked up:
 
 > The migration ran clean on staging. In production it **deleted** the index,
 > and the rollback <span style="color:#b4443a">failed</span> too. Nobody lost
 > data, but the <mark>postmortem</mark> is going to be
 > <span style="color:#b4443a">painful</span>.
 
-Nothing in that paragraph was marked up. `clean` went green, `deleted` gained
-weight, `failed` and `painful` went red, and `postmortem` got highlighted
-because it sits in the clause after `but` — the half of the sentence that
-turned.
-
-The engine is not a model. It is four lexicons and about two hundred lines of
-rules, which is the whole point.
+`clean` went green, `deleted` gained weight, `failed` and `painful` went red,
+and `postmortem` is marked because it sits in the clause after `but`, the half
+of the sentence that turned.
 
 ## Four channels, four axes
 
-A single "sentiment colour" is a gimmick. What makes this read like typography
-rather than like a highlighter is that the scores are independent and land on
-different axes, so they compose:
+Every token gets four scores, and each score drives a different axis, so they
+compose rather than collide.
 
-| channel | what it detects | what it moves |
+| channel | detects | moves |
 |---|---|---|
 | valence | how the text feels | colour |
-| salience | what it is pointing at | weight and size |
+| salience | what it points at | weight, size |
 | surprise | where it turns | highlight |
-| certainty | how sure it is | slant |
+| certainty | how sure it is | slant, opacity |
 
-A word can be negative *and* hedged *and* the subject of the paragraph, and
-you can see all three at once: dark red, leaning, heavy. Try doing that with
-bold and italic.
+A word can be negative and hedged and the subject of the paragraph all at once,
+and you see all three: dark red, leaning, heavy. Switch a channel off and the
+other three carry on, independent down to the CSS.
 
-## Four cases where this is more than a toy
+## Negation, where the naive version dies
 
-**1. Incident reports and log tails.** Severity is already in the words —
-`crash`, `corrupt`, `rollback`, `WARNING`. A log viewer that renders it means
-you find the bad line by looking, not by reading.
-
-**2. Confirming a dangerous command.** Every `rm -rf` prompt looks the same as
-every harmless one, which is exactly why nobody reads them. Feed the
-confirmation text through the same engine and the danger sizes itself:
-
-> **WARNING**: this operation is **irreversible**. It will drop **1.2TB** of
-> **production** user data **immediately** and there is no undo.
-
-`WARNING`, `irreversible` and `immediately` are in the salience lexicon;
-`1.2TB` is a magnitude; `production` earned its weight by being the word the
-sentence keeps circling. Nobody wrote the styling.
-
-**3. Seeing your own hedging.** Run a draft through the certainty channel and
-every `might`, `maybe`, `seems`, `arguably` leans away from you, and drags its
-clause with it:
-
-> I think this *might* be the culprit, though honestly the profiler output is
-> unreadable. *Maybe* the allocator is fine. The regression is definitely
-> real: p99 doubled and never came back.
-
-The first two sentences visibly lean; the third stands up straight. That is a
-writing tool nobody has to be told how to use.
-
-**4. Negation, which is where naive versions die.** The two halves here are
-the same words:
+These two sentences are made of the same words.
 
 > The launch was great and the numbers were excellent.
+>
 > The launch was **not** great and the numbers were **not** excellent.
 
-The first renders green. The second renders red — but *paler* red than a
-sentence full of genuinely nasty words, because `not great` is a complaint,
-not a catastrophe. The rule is one line: on hitting a negator within three
-content words, flip the sign and multiply by 0.74. Sentiment analysis has
-known that number since VADER; it is still the difference between a demo and
-a thing you would ship.
+The second goes red, and a paler red than a sentence of genuinely nasty words,
+because `not great` registers as a complaint rather than a catastrophe. One
+rule does it: on hitting a negator within three content words, flip the sign
+and multiply by 0.74. Sentiment analysis has known that number since VADER, and
+it still separates a demo from something you would ship.
 
-## Why the boring engine is the feature
+## One millisecond, no model
 
-The obvious 2026 implementation is: send the paragraph to a model, get spans
-back. It would handle sarcasm. It would also cost 400ms, an API key, a
-network, and a copy of the user's draft on someone else's machine — per
-keystroke.
+Sending the paragraph to a model buys you sarcasm detection, at a few hundred
+milliseconds, an API key, a network, and a copy of the reader's draft on
+someone else's machine — per keystroke.
 
-`analyze()` is synchronous and pure. A page of prose scores in about a
-millisecond, so the typography can update inside the input event, during SSR,
-in a `useMemo`, offline. That gap is not an optimisation; it is the difference
-between a feature you invoke and a *font* — something that is simply how the
-text looks, the way italics are.
+Four lexicons and about two hundred lines of rules score a page of prose in
+roughly a millisecond, synchronously, offline, with the same answer every time.
+Cheap enough to run inside the input event, during a server render, on a plane,
+which is what lets it behave the way italics do.
 
-The lexicons are small enough to read in one sitting and to argue with, which
-matters more than it sounds: when the styling is wrong you can see exactly
-which entry did it and fix it in one line. Nobody has ever fixed a model that
-way.
+The lexicons are small enough to read in one sitting and to argue with. When
+the styling is wrong you can see which entry did it and fix it in a line, or
+teach it your own vocabulary.
 
 ```jsx
 <SemanticText
@@ -107,28 +72,23 @@ way.
 />
 ```
 
-## Restraint is the design
+## Restraint
 
-The first version styled every word it had an opinion about, and it looked
-like a ransom note. Every threshold in the default theme is now high enough
-that most words come out untouched — a paragraph typically styles four or five
-of them. Emphasis is a contrast effect: it only exists relative to text that
-was left alone.
+The first version styled every word it had an opinion about and looked like a
+ransom note. The default thresholds now leave most words alone — a paragraph
+gets a handful. Emphasis works by contrast, so it exists only relative to text
+that nothing happened to.
 
-The other constraint is that colour is never the only signal. The
-`monochrome` theme carries all four channels on weight, size, slant and
-tracking with no colour at all — which is both the accessible answer and,
-honestly, the better looking one in print.
+Colour also never carries a channel by itself. The `monochrome` theme rides all
+four on weight, size, slant and tracking, which is both the accessible answer
+and the better looking one in print.
 
 ## Where it fails
 
-It reads words, not arguments. It will not notice that a perfectly calm
-sentence is describing a catastrophe, it does not get sarcasm, and it only
-speaks English. A model would beat it on all three.
-
-It would also never be a font.
+It reads words rather than arguments, so a calm sentence describing a
+catastrophe goes straight past it. Sarcasm defeats it. It speaks only English.
+A model beats it on all three, and could never be a font.
 
 ---
 
-Code, demo and tests: [drapoz/semfont](https://github.com/drapoz/semfont) — idea
-[#1455](https://github.com/drapoz/0/issues/1455).
+[github.com/drapoz/semfont](https://github.com/drapoz/semfont) — MIT.

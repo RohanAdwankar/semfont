@@ -9,7 +9,7 @@
 <meta property="og:description" content="Typography that modulates on meaning instead of markup. Four semantic channels, four type axes, one millisecond, no model.">
 <meta property="og:type" content="article">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..800&family=Recursive:CASL,MONO,slnt,wght@0..1,0..1,-15..0,300..900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Recursive:CASL,MONO,slnt,wght@0..1,0..1,-15..0,300..1000&display=swap">
 <style>
   :root {
     color-scheme: light dark;
@@ -91,23 +91,23 @@
   /* ---------- article ---------- */
   article { max-width: 40rem; }
   .eyebrow { display: block; margin-bottom: 1rem; }
+  /* Headings are set in the same face as everything else, at a base weight
+     the engine can still push a word above. See HEADING_WEIGHT in the script:
+     a salient word in a heading has to come out heavier than the heading, not
+     lighter, so the theme's weight base is raised to match per element. */
   h1 {
-    font-family: 'Fraunces', Georgia, serif;
-    font-variation-settings: 'opsz' 120;
-    font-weight: 700;
-    font-size: clamp(2.3rem, 6vw, 3.7rem);
-    line-height: 1.02;
-    letter-spacing: -0.022em;
+    font-weight: 520;
+    font-size: clamp(2.2rem, 6vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
     margin: 0 0 1.1rem;
     text-wrap: balance;
   }
   h2 {
-    font-family: 'Fraunces', Georgia, serif;
-    font-variation-settings: 'opsz' 40;
-    font-weight: 600;
-    font-size: 1.55rem;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
+    font-weight: 560;
+    font-size: 1.45rem;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
     margin: 3.2rem 0 .9rem;
     text-wrap: balance;
   }
@@ -237,7 +237,7 @@
     <h1>A font that reads what you wrote</h1>
     <p class="standfirst">Every emphasis in your document is a claim you made by
     hand. The file keeps the bold and forgets the reason, so when the sentence
-    changes the emphasis stays where it was.</p>
+    changes, the emphasis stays where it was.</p>
 
     <p>This page is set by semfont. Every word you are reading was scored and
     styled by it as the page loaded, this sentence included, and the controls on
@@ -342,7 +342,7 @@
 
     <footer class="no-sf">
       <a href="https://github.com/drapoz/semfont">github.com/drapoz/semfont</a>
-      &middot; MIT &middot; set in Recursive and Fraunces, whose
+      &middot; MIT &middot; set in Recursive, whose
       <span class="mono">wght</span> and <span class="mono">slnt</span> axes the
       engine drives directly.
     </footer>
@@ -383,6 +383,10 @@
   // and the live box are left alone; everything else is scored as you read it.
   const OPAQUE = new Set(['PRE', 'CODE', 'TABLE', 'TEXTAREA', 'BUTTON', 'SCRIPT', 'STYLE']);
 
+  // A salient word inside a heading must read heavier than the heading around
+  // it, so each heading level lends the theme its own weight base.
+  const HEADING_WEIGHT = { H1: { base: 520, range: 420 }, H2: { base: 560, range: 380 } };
+
   function claimProse(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
@@ -399,8 +403,9 @@
     return nodes.map((node) => {
       const span = document.createElement('span');
       span.className = 'sf';
+      const heading = node.parentElement.closest('h1, h2');
       node.parentNode.replaceChild(span, node);
-      return { el: span, text: node.nodeValue };
+      return { el: span, text: node.nodeValue, weight: heading && HEADING_WEIGHT[heading.tagName] };
     });
   }
 
@@ -431,12 +436,13 @@
   }
 
   // The same three lines the React component runs: analyze, style, render.
-  function paint(el, text, cfg) {
+  function paint(el, text, cfg, weight) {
+    const theme = weight ? { ...cfg.theme, weight } : cfg.theme;
     const result = analyze(text, { sensitivity: cfg.sensitivity });
     const frag = document.createDocumentFragment();
     for (const token of result.tokens) {
       for (const c of CHANNELS) if (!cfg.channels.includes(c)) token[c] = 0;
-      const styled = styleFor(token, cfg.theme);
+      const styled = styleFor(token, theme);
       if (!styled) { frag.append(token.text); continue; }
       const span = document.createElement('span');
       Object.assign(span.style, styled.style);
@@ -457,7 +463,7 @@
   function renderAll() {
     const cfg = config();
     const started = performance.now();
-    for (const { el, text } of prose) paint(el, text, cfg);
+    for (const { el, text, weight } of prose) paint(el, text, cfg, weight);
     const ms = performance.now() - started;
     renderStage(cfg);
     document.getElementById('pagetime').textContent =
