@@ -31,17 +31,22 @@ a *font* rather than as a feature: it can run on every keystroke, in a
 An LLM would read sarcasm better. It could not run 60 times a second inside a
 textarea.
 
-## The four channels
+## The channels
 
-Every token gets four scores, and each drives a different typographic axis so
-they compose instead of collide:
+Every token gets a score per channel, and each score drives a different
+typographic axis so they compose instead of collide:
 
 | channel | range | signals | typography |
 |---|---|---|---|
 | `valence` | −1..1 | sentiment lexicon, negation, intensifiers | colour |
-| `salience` | 0..1 | emphasis lexicon, ALL CAPS, numerals, repeated rare words | weight (`wght`), size |
+| `salience` | 0..1 | emphasis lexicon, caps, numerals, repeated rare words | weight (`wght`), size |
 | `surprise` | 0..1 | surprise markers, contrast conjunctions, local rarity spikes | highlight |
 | `certainty` | −1..1 | hedges and assertions, spread over the clause | slant (`slnt`), opacity |
+| `technicality` | 0..1 | camelCase, underscores, letters welded to digits, a short jargon list | `MONO`, in the `technical` theme |
+
+The first four are on in every theme. `technicality` is scored always and
+mapped only by `technical`, which is the pattern for adding your own: scoring a
+channel costs a lookup per token, and a theme that ignores it pays nothing.
 
 Two rules do most of the work. **Negation flips and damps**: `not great` is
 mildly negative, not the mirror image of `great`. **Rarity is relative to the
@@ -96,15 +101,38 @@ Every other channel scores 0 and emits nothing, so the spans carry exactly one
 CSS property. `demo/react.html` mounts the same paragraph three times this
 way.
 
-**Pick axes.** A channel's typography is theme data, so weight without the
-size change is a theme, not a fork:
+**Pick axes.** A theme's `map` is a list of rows, one per channel-to-axis
+pairing, so how many modulations you get is yours to set. Weight without the
+size change is one row removed:
 
 ```jsx
-<SemanticText theme={{ size: { range: 0 } }} text={incident} />
+import { themes } from 'semfont';
+
+<SemanticText
+  theme={{ map: themes.editorial.map.filter((row) => row.render !== 'size') }}
+  text={incident}
+/>
 ```
 
-`color: null` and `highlight: null` switch those off the same way. That is
-all `monochrome` is.
+A row is `{ channel, render, ...options }`, plus an optional
+`side: 'negative' | 'positive'` to fire on only half of a bipolar channel. The
+renderers are `color`, `weight`, `size`, `highlight`, `slant`, `tracking`,
+`fade`, `underline`, and Recursive's own `mono`, `casual` and `cursive`. Rows
+are independent and additive, so another one is a line of data:
+
+```jsx
+<SemanticText
+  theme={{ map: [...themes.editorial.map,
+                 { channel: 'technicality', render: 'mono' }] }}
+  text={incident}
+/>
+```
+
+Cost, measured on a 2,875-character page: scoring five channels takes 1.43ms,
+and running a nine-row map over every token takes 0.47ms. The ceiling on how
+many modulations to use is legibility rather than speed, since emphasis works
+by contrast and a page where everything moves has nothing left to move
+against.
 
 **Keep the scores, render it yourself.** `useSemanticText` hands back the
 tokens and runs, so the styling can be your own classes, a `<mark>`, an
@@ -144,8 +172,10 @@ into the HTML and ship no JavaScript at all.
 `editorial` is deliberately quiet: high thresholds, small ranges, most words
 left completely alone. If every word is styled, none of them is emphasised.
 `loud` turns the same scores up for a headline or a demo. `monochrome` emits
-no colour at all: weight, size and slant carry all four channels, for print,
-e-ink, and for the fact that colour alone is not an accessible channel.
+no colour at all: weight, size, slant and an underline carry all four channels,
+for print, e-ink, and for the fact that colour alone is not an accessible
+channel. `technical` adds the fifth channel on `MONO`, so identifiers shift
+toward monospace, and puts hedges on `CASL` as well as `slnt`.
 
 ## The post
 
