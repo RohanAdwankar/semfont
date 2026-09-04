@@ -92,9 +92,9 @@ to cut, from coarsest to finest.
 <SemanticText text={incident} channels={['valence']} />
 ```
 
-Every other channel scores 0 and emits nothing — the spans carry one CSS
-property, not a disabled-but-present one. `demo/react.html` mounts the same
-paragraph three times this way.
+Every other channel scores 0 and emits nothing, so the spans carry exactly one
+CSS property. `demo/react.html` mounts the same paragraph three times this
+way.
 
 **Pick axes.** A channel's typography is theme data, so weight without the
 size change is a theme, not a fork:
@@ -149,12 +149,13 @@ e-ink, and for the fact that colour alone is not an accessible channel.
 
 ## The post
 
-`index.html` at the repo root is the write-up, and every specimen in it is set
-by the engine as you read: the opening one is a live editor, and the rail
-toggles channels, sensitivity and theme across the whole page. It imports
-`src/` directly, so there is no copy of the engine to keep in sync and no build
-step — serve the repo and open `/`, or turn on GitHub Pages for `main` to
-publish it as-is. `POST.md` is the same words in plain Markdown.
+`index.html` at the repo root is the write-up, and the engine sets all of it:
+every word of the prose is scored and styled at load, the rail re-runs the
+whole page when you change a channel, the sensitivity or the theme, and the box
+at the top takes the reader's own text. It imports `src/` directly, so there is
+no copy of the engine to keep in sync and no build step — serve the repo and
+open `/`, or turn on GitHub Pages for `main` to publish it as-is. `POST.md` is
+the same words in plain Markdown.
 
 ## Running it
 

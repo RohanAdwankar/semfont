@@ -164,7 +164,9 @@
     background: none; border: 0; border-left: 2px solid var(--rule);
     border-radius: 0; padding: .1rem 0 .1rem 1.4rem;
   }
-  .sf { white-space: pre-wrap; }
+  /* Only the live box keeps the reader's own line breaks; prose collapses
+     whitespace the way prose should. */
+  .stage .out { white-space: pre-wrap; }
   .sf span { transition: font-variation-settings .22s ease, color .22s ease, background .22s ease, font-size .22s ease; }
   @media (prefers-reduced-motion: reduce) { .sf span { transition: none; } }
   .mid-sf { font-size: 1.18rem; line-height: 1.58; }
@@ -226,17 +228,21 @@
       <label><input type="radio" name="th" value="loud"> loud</label>
       <label><input type="radio" name="th" value="monochrome"> monochrome</label>
     </fieldset>
-    <p class="note">Every specimen on this page is rendered by the engine as you
-    read it. These controls re-run it.</p>
+    <p class="note">Every word of this page is set by the engine.
+    These controls re-run it.<br><span class="timing" id="pagetime"></span></p>
   </div>
 
   <article>
     <span class="eyebrow">semfont &middot; MIT &middot; no dependencies</span>
     <h1>A font that reads what you wrote</h1>
     <p class="standfirst">Every emphasis in your document is a claim you made by
-    hand. The file records the bold, not the mattering — so when the sentence
-    changes, the emphasis stays where it was. This one decides the typography
-    from what the text means. Edit it and see.</p>
+    hand. The file keeps the bold and forgets the reason, so when the sentence
+    changes the emphasis stays where it was.</p>
+
+    <p>This page is set by semfont. Every word you are reading was scored and
+    styled by it as the page loaded, this sentence included, and the controls on
+    the left re-run the whole thing. The box below is the part you can put your
+    own words into.</p>
 
     <div class="samples" id="samples"></div>
 
@@ -245,18 +251,14 @@
       <textarea class="edit" id="edit" spellcheck="false" aria-label="text to set"></textarea>
     </div>
     <p class="stagecap">
-      <span>Nothing above was marked up. Type into the box and the type follows.</span>
+      <span>Nothing here was marked up.</span>
       <span class="timing" id="timing"></span>
     </p>
 
-    <p>The engine is not a model. It is four lexicons and about two hundred
-    lines of rules, which is the entire point.</p>
-
     <h2>Four channels, four axes</h2>
 
-    <p>A single sentiment colour is a gimmick. What makes this read as
-    typography rather than as a highlighter is that the scores are independent
-    and land on different axes, so they compose.</p>
+    <p>Every token gets four scores, and each score drives a different axis, so
+    they compose rather than collide.</p>
 
     <table class="legend">
       <caption>each row set in its own channel</caption>
@@ -267,93 +269,63 @@
       <tr><td class="ch-cer">certainty</td><td>how sure it is</td><td>slant, opacity</td></tr>
     </table>
 
-    <p>A word can be negative <em>and</em> hedged <em>and</em> the subject of
-    the paragraph, and you see all three at once: dark red, leaning, heavy. Try
-    that with bold and italic. Switch a channel off in the rail and the rest
-    keep working — they are independent all the way down to the CSS.</p>
+    <p>A word can be negative and hedged and the subject of the paragraph all at
+    once, and you see all three: dark red, leaning, heavy. Switch a channel off
+    in the rail and the other three carry on, independent down to the CSS.</p>
 
-    <h2>Where this stops being a toy</h2>
+    <h2>Negation, where the naive version dies</h2>
 
-    <p><strong>Confirming a dangerous command.</strong> Every destructive prompt
-    looks like every harmless one, which is exactly why nobody reads them. Send
-    the confirmation text through the engine and the danger sizes itself:</p>
-
-    <div class="specimen">
-      <div class="sf mid-sf">WARNING: this operation is irreversible. It will drop 1.2TB of production user data immediately and there is no undo. Type the cluster name to continue.</div>
-      <p class="cap">WARNING, irreversible and immediately are in the salience
-      lexicon; 1.2TB is a magnitude; production earned its weight by being the
-      word the passage keeps circling.</p>
-    </div>
-
-    <p><strong>Seeing your own hedging.</strong> Run a draft through the
-    certainty channel and every <em>might</em>, <em>maybe</em>, <em>seems</em>
-    leans away from you — and drags its clause with it.</p>
-
-    <div class="specimen plain">
-      <div class="sf mid-sf">I think this might be the culprit, though honestly the profiler output is unreadable. Maybe the allocator is fine. The regression is definitely real: p99 doubled on Tuesday and never came back.</div>
-      <p class="cap">the first two sentences lean; the third stands up straight.</p>
-    </div>
-
-    <p><strong>Negation, which is where naive versions die.</strong> These two
-    sentences are made of the same words.</p>
+    <p>These two sentences are made of the same words.</p>
 
     <div class="pair">
       <div><div class="sf">The launch was great and the numbers were excellent.</div></div>
       <div><div class="sf">The launch was not great and the numbers were not excellent.</div></div>
     </div>
-    <p class="cap" style="border:0;padding-top:.7rem">The second renders red, but
-    <em>paler</em> red than a sentence of genuinely nasty words: <span class="mono">not great</span>
-    is a complaint, not a catastrophe. One rule — on hitting a negator within three
-    content words, flip the sign and multiply by 0.74. Sentiment analysis has known
-    that number since VADER; it is still the difference between a demo and a thing
-    you would ship.</p>
+    <p class="cap" style="border:0;padding-top:.7rem">The second goes red, and a
+    paler red than a sentence of genuinely nasty words, because <span class="mono">not great</span>
+    registers as a complaint rather than a catastrophe. One rule does it: on hitting
+    a negator within three content words, flip the sign and multiply by 0.74.
+    Sentiment analysis has known that number since VADER, and it still separates a
+    demo from something you would ship.</p>
 
-    <h2>Why the boring engine is the feature</h2>
+    <h2>One millisecond, no model</h2>
 
-    <p>The obvious implementation is to send the paragraph to a model and get
-    spans back. It would handle sarcasm. It would also cost a few hundred
-    milliseconds, an API key, a network, and a copy of your draft on someone
-    else's machine — per keystroke.</p>
+    <p>Sending the paragraph to a model buys you sarcasm detection, at a few
+    hundred milliseconds, an API key, a network, and a copy of the reader's
+    draft on someone else's machine — per keystroke.</p>
 
-    <p>The number in the corner of that box is the whole argument. Scoring is
-    synchronous and pure: a page of prose in about a millisecond, no network,
-    no key, the same answer every time. That gap is not an optimisation, it is
-    the distinction. Something you invoke is a feature. Something that is simply
-    how the text looks, the way italics are, is a <em>font</em> — and it only
-    gets to be one if it can run inside the input event, during a server render,
-    on a plane.</p>
+    <p>The number under the box is the argument. Four lexicons and about two
+    hundred lines of rules score a page of prose in roughly a millisecond,
+    synchronously, offline, with the same answer every time. Cheap enough to run
+    inside the input event, during a server render, on a plane, which is what
+    lets it behave the way italics do.</p>
 
-    <p>The lexicons are also small enough to read in one sitting and to argue
-    with. When the styling is wrong you can see which entry did it and fix it in
-    one line, or teach it your own vocabulary. Nobody has ever fixed a model
-    that way.</p>
+    <p>The lexicons are small enough to read in one sitting and to argue with.
+    When the styling is wrong you can see which entry did it and fix it in a
+    line, or teach it your own vocabulary.</p>
 
 <pre>&lt;SemanticText
   lexicon={{ valence: { flaky: -0.7, oncall: -0.4 } }}
   text={incident}
 /&gt;</pre>
 
-    <h2>Restraint is the design</h2>
+    <h2>Restraint</h2>
 
     <p>The first version styled every word it had an opinion about and looked
-    like a ransom note. The thresholds in the default theme are now high enough
-    that most words come out untouched — a paragraph typically styles four or
-    five. Emphasis is a contrast effect; it exists only relative to text that
-    was left alone. Push <em>sensitivity</em> up in the rail to watch that stop
-    being true.</p>
+    like a ransom note. The default thresholds now leave most words alone — a
+    paragraph gets a handful. Emphasis works by contrast, so it exists only
+    relative to text that nothing happened to. Push sensitivity up in the rail
+    to watch that stop being true.</p>
 
-    <p>The other constraint is that colour is never the only signal. Switch the
-    theme to <em>monochrome</em> and all four channels ride on weight, size,
-    slant and tracking instead — the accessible answer, and the better looking
-    one in print.</p>
+    <p>Colour also never carries a channel by itself. Switch to monochrome and
+    all four ride on weight, size, slant and tracking, which is both the
+    accessible answer and the better looking one in print.</p>
 
     <h2>Where it fails</h2>
 
-    <p>It reads words, not arguments. It will not notice that a perfectly calm
-    sentence is describing a catastrophe, it does not get sarcasm, and it speaks
-    only English. A model would beat it on all three.</p>
-
-    <p>It would also never be a font.</p>
+    <p>It reads words rather than arguments, so a calm sentence describing a
+    catastrophe goes straight past it. Sarcasm defeats it. It speaks only
+    English. A model beats it on all three, and could never be a font.</p>
 
     <h2>Using it</h2>
 
@@ -361,16 +333,16 @@
 
 &lt;SemanticText as="p"&gt;{incident}&lt;/SemanticText&gt;</pre>
 
-    <p>One React component, no build step, no dependency but React. Take only
-    the part you want: <code>channels={['valence']}</code> for colour and
-    nothing else, a theme object to move which axis a channel drives,
+    <p class="no-sf">One React component, no build step, no dependency but React.
+    Take only the part you want: <code>channels={['valence']}</code> for colour
+    and nothing else, a theme object to change which axis a channel drives,
     <code>useSemanticText</code> for the scores with your own rendering, or
     <code>analyze(text)</code> for four numbers per token with no React and no
     CSS at all.</p>
 
-    <footer>
+    <footer class="no-sf">
       <a href="https://github.com/drapoz/semfont">github.com/drapoz/semfont</a>
-      &middot; MIT &middot; specimens set in Recursive, whose
+      &middot; MIT &middot; set in Recursive and Fraunces, whose
       <span class="mono">wght</span> and <span class="mono">slnt</span> axes the
       engine drives directly.
     </footer>
@@ -387,24 +359,52 @@
     'incident': 'The migration ran clean on staging. In production it deleted the '
       + 'index, and the rollback failed too. Nobody lost data, but the postmortem '
       + 'is going to be painful.',
-    'release notes': 'The new scheduler shipped on Tuesday. Startup is 40% faster '
-      + 'and the old crash on reload is fixed. One known bug: watch mode still '
-      + 'leaks file descriptors on very large trees.',
+    'a dangerous command': 'WARNING: this operation is irreversible. It will drop '
+      + '1.2TB of production user data immediately and there is no undo. Type the '
+      + 'cluster name to continue.',
     'a hedged review': 'I think the allocator might be the culprit, but honestly '
       + 'the profiler output is unreadable. The regression is definitely real: p99 '
       + 'doubled on Tuesday and never came back.',
     'a bad review': 'Absolutely the worst onboarding I have ever suffered through. '
       + 'Three broken links, a crash on signup, and then it silently deleted my '
       + 'project. Support was lovely about it.',
+    'release notes': 'The new scheduler shipped on Tuesday. Startup is 40% faster '
+      + 'and the old crash on reload is fixed. One known bug: watch mode still '
+      + 'leaks file descriptors on very large trees.',
   };
 
   const out = document.getElementById('out');
   const edit = document.getElementById('edit');
   const timing = document.getElementById('timing');
   const sens = document.getElementById('sens');
-  const specimens = [...document.querySelectorAll('.sf')]
-    .filter((el) => el !== out)
-    .map((el) => ({ el, text: el.textContent.trim() }));
+
+  // Wrap every run of prose in the article so the engine can set the page
+  // itself. Code, the legend (which is styled by hand to name the channels)
+  // and the live box are left alone; everything else is scored as you read it.
+  const OPAQUE = new Set(['PRE', 'CODE', 'TABLE', 'TEXTAREA', 'BUTTON', 'SCRIPT', 'STYLE']);
+
+  function claimProse(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        for (let el = node.parentElement; el && el !== root; el = el.parentElement) {
+          if (OPAQUE.has(el.tagName)) return NodeFilter.FILTER_REJECT;
+          if (el.classList.contains('no-sf') || el === out) return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const nodes = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    return nodes.map((node) => {
+      const span = document.createElement('span');
+      span.className = 'sf';
+      node.parentNode.replaceChild(span, node);
+      return { el: span, text: node.nodeValue };
+    });
+  }
+
+  const prose = claimProse(document.querySelector('article'));
 
   for (const name of Object.keys(SAMPLES)) {
     const b = document.createElement('button');
@@ -456,8 +456,12 @@
 
   function renderAll() {
     const cfg = config();
-    for (const { el, text } of specimens) paint(el, text, cfg);
+    const started = performance.now();
+    for (const { el, text } of prose) paint(el, text, cfg);
+    const ms = performance.now() - started;
     renderStage(cfg);
+    document.getElementById('pagetime').textContent =
+      `whole page re-set in ${ms.toFixed(1)} ms`;
   }
 
   document.addEventListener('change', renderAll);
