@@ -1,5 +1,9 @@
 # A font that reads what you wrote
 
+*The live version of this post is `index.html` — same words, but every
+specimen is rendered by the engine and the opening one is editable. Serve the
+repo and open it, or publish it with GitHub Pages.*
+
 Every emphasis in your document is a lie you told by hand. You bolded the
 word because it mattered — but the file only records the bold, not the
 mattering. Change the sentence and the emphasis stays where it was.

@@ -147,12 +147,21 @@ left completely alone. If every word is styled, none of them is emphasised.
 no colour at all — weight, size and slant carry all four channels, for print,
 e-ink, and for the fact that colour alone is not an accessible channel.
 
+## The post
+
+`index.html` at the repo root is the write-up, and every specimen in it is set
+by the engine as you read: the opening one is a live editor, and the rail
+toggles channels, sensitivity and theme across the whole page. It imports
+`src/` directly, so there is no copy of the engine to keep in sync and no build
+step — serve the repo and open `/`, or turn on GitHub Pages for `main` to
+publish it as-is. `POST.md` is the same words in plain Markdown.
+
 ## Running it
 
 ```bash
 node --test test/*.test.js      # engine + theme tests, no dependencies
 npm install react react-dom     # only for the React render tests
-python3 -m http.server          # then open /demo/
+python3 -m http.server          # then open / for the post, /demo/ for the demo
 ```
 
 The demo is the fastest way to see it: five sample passages, live editing,
