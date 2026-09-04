@@ -52,6 +52,23 @@ export const SURPRISE = {
   instead: 0.45, except: 0.4, contrary: 0.6, ironically: 0.7, twist: 0.6,
 };
 
+/**
+ * technicality: tokens that name machinery rather than describe it. Mostly
+ * decided by shape in analyze.js (camelCase, underscores, letters mixed with
+ * digits); this list covers the words whose shape gives nothing away.
+ */
+export const TECHNICAL = {
+  kubelet: 0.95, allocator: 0.9, mutex: 0.95, daemon: 0.9, kernel: 0.85,
+  socket: 0.85, buffer: 0.8, stdout: 0.95, stderr: 0.95, regex: 0.9,
+  compiler: 0.85, parser: 0.85, runtime: 0.8, binary: 0.8, checksum: 0.9,
+  endpoint: 0.8, latency: 0.8, throughput: 0.8, schema: 0.8, rollback: 0.8,
+  migration: 0.7, commit: 0.75, branch: 0.6, merge: 0.6, deploy: 0.75,
+  npm: 0.95, git: 0.9, ssh: 0.95, http: 0.95, json: 0.95, yaml: 0.95,
+  sql: 0.95, wasm: 0.95, gpu: 0.9, cpu: 0.9, ram: 0.85, dns: 0.95,
+  cluster: 0.75, container: 0.7, namespace: 0.85, descriptor: 0.85,
+  lockfile: 0.9, changelog: 0.8, staging: 0.7, upstream: 0.75,
+};
+
 /** contrast conjunctions: what follows them is the surprising half. */
 export const CONTRAST = new Set([
   'but', 'however', 'yet', 'though', 'although', 'nevertheless',

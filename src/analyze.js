@@ -9,13 +9,19 @@
 //   salience    0 background   ..   1 look here
 //   surprise    0 expected     ..   1 the sentence just turned
 //   certainty  -1 hedged       ..  +1 asserted
+//   technicality 0 prose        ..   1 names machinery
+//
+// A channel is just a number on a token, so adding one costs a lookup per
+// token and nothing at all to the themes that ignore it.
 
 import {
-  VALENCE, SALIENCE, SURPRISE, CERTAINTY, CONTRAST,
+  VALENCE, SALIENCE, SURPRISE, CERTAINTY, TECHNICAL, CONTRAST,
   INTENSIFIERS, NEGATORS, lookup, rarity,
 } from './lexicon.js';
 
-const TOKEN_RE = /(\s+)|([\p{L}][\p{L}\p{N}'’-]*)|(\d[\d.,:%]*(?:[\p{L}]{1,3}\b)?)|([^\s])/gu;
+// Underscores stay inside a word: cluster_config is one identifier, and
+// splitting it hides exactly the shape the technicality channel reads.
+const TOKEN_RE = /(\s+)|([\p{L}][\p{L}\p{N}_'’-]*)|(\d[\d.,:%]*(?:[\p{L}]{1,3}\b)?)|([^\s])/gu;
 const NEGATION_WINDOW = 3;
 const INTENSIFIER_WINDOW = 2;
 // Below this rarity a word is grammar rather than content: "the", "and", "is".
@@ -43,6 +49,7 @@ function tokenize(text) {
       salience: 0,
       surprise: 0,
       certainty: 0,
+      technicality: 0,
     });
   }
   return tokens;
@@ -70,6 +77,23 @@ function segment(tokens) {
 
 const isContent = (t) => t.kind === 'word' || t.kind === 'number';
 
+/**
+ * Does this token name machinery? Shape answers most of it: prose does not
+ * contain camelCase, underscores, or letters welded to digits.
+ */
+function technicality(token, table) {
+  if (token.kind === 'number') return /[a-z]/i.test(token.text) ? 0.7 : 0.45;
+  const raw = token.text;
+  let score = lookup(table, token.norm) ?? 0;
+  if (/\p{Ll}\p{Lu}/u.test(raw)) score = Math.max(score, 0.9);
+  if (raw.includes('_')) score = Math.max(score, 0.9);
+  if (/\p{L}/u.test(raw) && /\d/.test(raw)) score = Math.max(score, 0.8);
+  if (raw.length >= 2 && raw === raw.toUpperCase() && /\p{L}/u.test(raw)) {
+    score = Math.max(score, 0.55);
+  }
+  return score;
+}
+
 /** Walk back over content words in the same sentence. */
 function* lookBehind(tokens, from, span) {
   let seen = 0;
@@ -96,6 +120,7 @@ export function analyze(text, options = {}) {
   const salience = ext.salience ? { ...SALIENCE, ...ext.salience } : SALIENCE;
   const surprise = ext.surprise ? { ...SURPRISE, ...ext.surprise } : SURPRISE;
   const certainty = ext.certainty ? { ...CERTAINTY, ...ext.certainty } : CERTAINTY;
+  const technical = ext.technicality ? { ...TECHNICAL, ...ext.technicality } : TECHNICAL;
 
   const tokens = tokenize(text);
   const sentences = segment(tokens);
@@ -192,6 +217,8 @@ export function analyze(text, options = {}) {
     // certainty: full strength on the hedge itself, a lean on its clause.
     const own = lookup(certainty, t.norm);
     t.certainty = clamp(own !== undefined ? own : sentence.certainty * 0.55, -1, 1);
+
+    t.technicality = clamp01(technicality(t, technical) * sensitivity);
   }
 
   return { text, tokens, sentences, stats: { meanRarity, words: content.length } };

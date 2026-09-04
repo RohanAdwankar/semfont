@@ -73,9 +73,12 @@ if (renderToStaticMarkup) {
     assert.ok(!weight.includes('color-mix'));
   });
 
-  test('a theme can switch an axis off without touching the channel', () => {
+  test('a theme can switch an axis off without touching the channel', async () => {
+    const { themes } = await import('../src/theme.js');
     const text = 'WARNING: this deletes production data.';
+    const noSize = { map: themes.editorial.map.filter((row) => row.render !== 'size') };
     assert.ok(render({ text }).includes('font-size'));
-    assert.ok(!render({ text, theme: { size: { range: 0 } } }).includes('font-size'));
+    assert.ok(!render({ text, theme: noSize }).includes('font-size'));
+    assert.ok(render({ text, theme: noSize }).includes('font-weight'));
   });
 }

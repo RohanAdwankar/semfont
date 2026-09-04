@@ -107,6 +107,35 @@ test('the monochrome theme never emits colour', () => {
   }
 });
 
+test('technicality is decided by shape, not by a word list alone', () => {
+  const shaped = 'the readFileSync call and the cluster_config value and p99 itself';
+  const { tokens } = analyze(shaped);
+  const tech = Object.fromEntries(tokens.filter((t) => t.technicality > 0.5).map((t) => [t.norm, 1]));
+  for (const w of ['readfilesync', 'clusterconfig', 'p99']) assert.ok(tech[w], w);
+  for (const w of ['the', 'call', 'value', 'itself']) assert.ok(!tech[w], w);
+});
+
+test('a theme map row can be added, and only that row fires', () => {
+  const { tokens } = analyze('the readFileSync call failed');
+  const bare = { ...themes.editorial, map: [{ channel: 'technicality', render: 'mono' }] };
+  const styled = tokens.map((t) => styleFor(t, bare)).filter(Boolean);
+  assert.equal(styled.length, 1);
+  assert.match(styled[0].style.fontVariationSettings, /"MONO"/);
+  assert.equal(styled[0].style.color, undefined);
+});
+
+test('the technical theme drives five channels across five axes', () => {
+  const { tokens } = analyze('The kubelet might have deleted the p99 dashboard, which is a disaster.');
+  const axes = new Set();
+  for (const t of tokens) {
+    const out = styleFor(t, themes.technical);
+    if (out) for (const k of Object.keys(out.axes)) axes.add(k);
+  }
+  assert.ok(axes.has('MONO'), [...axes].join(','));
+  assert.ok(axes.has('wght'), [...axes].join(','));
+  assert.ok(axes.has('slnt'), [...axes].join(','));
+});
+
 test('sensitivity scales the whole readout', () => {
   const text = 'the deploy failed and the rollback failed too';
   const quiet = summarize(analyze(text, { sensitivity: 0.5 }));

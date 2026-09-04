@@ -8,11 +8,13 @@ import { createElement as h, useEffect, useMemo } from 'react';
 import { analyze, summarize } from './analyze.js';
 import { themes, baseTheme, styleFor } from './theme.js';
 
-const ALL_CHANNELS = ['valence', 'salience', 'surprise', 'certainty'];
+const ALL_CHANNELS = ['valence', 'salience', 'surprise', 'certainty', 'technicality'];
 
 function resolveTheme(theme) {
   if (!theme) return baseTheme;
   if (typeof theme === 'string') return themes[theme] ?? baseTheme;
+  // A partial theme overrides field by field; `map` replaces wholesale, since
+  // merging two lists of rows position by position would be guesswork.
   return { ...baseTheme, ...theme, thresholds: { ...baseTheme.thresholds, ...theme.thresholds } };
 }
 

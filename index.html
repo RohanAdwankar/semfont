@@ -217,6 +217,7 @@
       <label><input type="checkbox" data-channel="salience" checked> salience <span class="axis">&rarr; weight</span></label>
       <label><input type="checkbox" data-channel="surprise" checked> surprise <span class="axis">&rarr; mark</span></label>
       <label><input type="checkbox" data-channel="certainty" checked> certainty <span class="axis">&rarr; slant</span></label>
+      <label><input type="checkbox" data-channel="technicality" checked> technicality <span class="axis">&rarr; mono</span></label>
     </fieldset>
     <h2>Sensitivity</h2>
     <fieldset>
@@ -227,6 +228,7 @@
       <label><input type="radio" name="th" value="editorial" checked> editorial</label>
       <label><input type="radio" name="th" value="loud"> loud</label>
       <label><input type="radio" name="th" value="monochrome"> monochrome</label>
+      <label><input type="radio" name="th" value="technical"> technical</label>
     </fieldset>
     <p class="note">Every word of this page is set by the engine.
     These controls re-run it.<br><span class="timing" id="pagetime"></span></p>
@@ -272,6 +274,14 @@
     <p>A word can be negative and hedged and the subject of the paragraph all at
     once, and you see all three: dark red, leaning, heavy. Switch a channel off
     in the rail and the other three carry on, independent down to the CSS.</p>
+
+    <p>Four is the default rather than the limit. The map from channel to axis
+    is a list of rows, so adding one is a line of data: pick the technical
+    theme in the rail and a fifth channel wakes up, reading identifiers by
+    their shape and sending readFileSync and cluster_config toward monospace on
+    Recursive's MONO axis while the other four carry on as they were. The whole
+    map runs in about half a millisecond per page against one and a half for
+    the scoring, so the ceiling on this is legibility.</p>
 
     <h2>Negation, where the naive version dies</h2>
 
@@ -353,7 +363,7 @@
   import { analyze } from './src/analyze.js';
   import { styleFor, themes } from './src/theme.js';
 
-  const CHANNELS = ['valence', 'salience', 'surprise', 'certainty'];
+  const CHANNELS = ['valence', 'salience', 'surprise', 'certainty', 'technicality'];
 
   const SAMPLES = {
     'incident': 'The migration ran clean on staging. In production it deleted the '
@@ -371,6 +381,9 @@
     'release notes': 'The new scheduler shipped on Tuesday. Startup is 40% faster '
       + 'and the old crash on reload is fixed. One known bug: watch mode still '
       + 'leaks file descriptors on very large trees.',
+    'a bug report': 'readFileSync throws ENOENT on cluster_config.yaml whenever the '
+      + 'kubelet restarts, and p99 latency doubles while the retry loop spins. '
+      + 'Probably a race in the watcher, but the stack trace is unreadable.',
   };
 
   const out = document.getElementById('out');
