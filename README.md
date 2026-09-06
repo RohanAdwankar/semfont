@@ -4,8 +4,6 @@ Typography that modulates on meaning instead of on markup. Negative things
 render red, important things get heavier, surprising things get highlighted,
 hedged things lean, and nothing in the pipeline is a model.
 
-Idea: [#1455](https://github.com/drapoz/0/issues/1455).
-
 ```jsx
 import { SemanticText } from 'semfont';
 

@@ -91,4 +91,4 @@ A model beats it on all three, and could never be a font.
 
 ---
 
-[github.com/drapoz/semfont](https://github.com/drapoz/semfont). MIT.
+[github.com/RohanAdwankar/semfont](https://github.com/RohanAdwankar/semfont). MIT.
