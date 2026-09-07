@@ -4,6 +4,8 @@ Typography that modulates on meaning instead of on markup. Negative things
 render red, important things get heavier, surprising things get highlighted,
 hedged things lean, and nothing in the pipeline is a model.
 
+![the same paragraph set twice, side by side: on the left every word is the same grey, on the right clean comes out green, production and deleted come out heavy, might leans, postmortem is highlighted and failed and painful come out red; then the sentence is negated and the two green words on the right turn red](demo/demo.gif)
+
 ```jsx
 import { SemanticText } from 'semfont';
 
