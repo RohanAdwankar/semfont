@@ -1,2 +1,9 @@
 node_modules/
 package-lock.json
+
+# Recording inputs and outputs. The GIF in the README is the one visual
+# asset this repo carries; everything else the capture script makes is
+# regenerated on demand rather than committed.
+demo/.fonts/
+demo/.frames-*/
+demo/demo.mp4

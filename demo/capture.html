@@ -1,0 +1,717 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>semfont capture stage</title>
+
+<!--
+  The recording stage for demo/demo.gif and demo/demo.mp4.
+
+  This page holds exactly one state per frame. There is no timer, no
+  requestAnimationFrame, no CSS transition and no CSS animation anywhere in
+  it: every value that moves is a pure function of the frame index, and
+  `seek(i)` puts the page into the state for frame i. capture.mjs walks
+  0..FRAMES-1, screenshots each one, and hands the sequence to ffmpeg, so the
+  same command always produces the same file.
+
+  The type is set by semfont itself. `analyze()` scores the text and
+  `styleFor()` maps the scores onto typography; those are the same two
+  functions `<SemanticText>` calls internally, imported from the same source
+  the package ships. Nothing here hand-picks a colour or a weight for a word.
+
+  Scoring runs on whatever string is on screen at that frame, not on the
+  finished paragraph. That is why the negation scene works: the two panes go
+  red because the engine re-read a sentence that now contains "not", not
+  because the stage faded one colour into another.
+-->
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+  /* capture.mjs caches this locally and serves it from /__font/, because the
+     recording browser has no route to fonts.gstatic.com. Roboto Flex is the
+     same variable face demo/index.html uses, and the wght and slnt axes are
+     the whole reason the styling is visible as a ramp rather than as two
+     steps. */
+  @font-face {
+    font-family: 'Capture Flex';
+    src: url('/__font/robotoflex.woff2') format('woff2');
+    font-weight: 100 1000;
+    font-style: oblique 0deg 10deg;
+    font-display: block;
+  }
+
+  :root {
+    --paper: #fbfaf8;
+    --ink: #16181d;
+    --dim: #6c6a66;
+    --rule: #ddd9d1;
+    --rule-strong: #8f8b84;
+    --accent: #0a70c8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Capture Flex', system-ui, sans-serif;
+    font-variation-settings: 'opsz' 24;
+    overflow: hidden;
+  }
+
+  /* Nothing may animate itself. Every motion in the recording is computed
+     from the frame index in JS, so a stray transition would desynchronise
+     the frame from its index and break reproducibility. */
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  #frame {
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  /* #world is what the camera moves. Panning and zooming is one transform on
+     this element, so the caption bar and the title stay pinned outside it. */
+  #world {
+    position: absolute;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7em;
+  }
+
+  .mark {
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+
+  /* minmax(0, 1fr) rather than 1fr, because a plain 1fr track will not shrink
+     below its content's min-content width and the code pane, being
+     white-space: pre, has a very large one. With 1fr the code scene pushed
+     the paragraph beside it down to one word per line. */
+  .panes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .panes.with-code {
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  }
+
+  /* A pane never spills into its neighbour, whatever is in it. */
+  .pane { overflow: hidden; }
+
+  .label {
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  .pane.set .label { color: var(--accent); }
+
+  .rule {
+    border-top: 1px solid var(--rule);
+  }
+
+  .pane.set .rule { border-top-color: var(--rule-strong); }
+
+  .body {
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+
+  /* The code pane. Deliberately unhighlighted: this video is about type that
+     modulates on meaning, and a syntax-coloured code panel next to it would
+     be arguing the opposite case in the same frame. */
+  .code {
+    white-space: pre;
+    font-family: 'DejaVu Sans Mono', ui-monospace, monospace;
+    color: var(--ink);
+    line-height: 1.62;
+    font-variation-settings: normal;
+  }
+
+  /* The caret. A block of accent colour rather than a glyph, so it survives
+     GIF quantisation. */
+  .caret { color: var(--accent); }
+
+  /* Focus: everything the camera is not talking about is knocked back, and
+     the word it is talking about gets a ring. Both panes get a ring, because
+     the point of the ring on the left is that nothing happened there. */
+  .dim { opacity: 0.22; }
+
+  #rings { position: absolute; inset: 0; pointer-events: none; }
+
+  .ring {
+    position: absolute;
+    border-radius: 0.22em;
+    border: 2px solid var(--accent);
+  }
+
+  .ring.flat { border-color: var(--rule-strong); }
+
+  #caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  #closing {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+    text-align: center;
+    gap: 0.75em;
+  }
+
+  /* An id selector outranks the user agent's [hidden] rule, so the closing
+     card needs to opt back out explicitly or it covers every frame. */
+  #closing[hidden] { display: none; }
+</style>
+
+<div id="frame">
+  <div id="world">
+    <header>
+      <span class="mark" id="mark">semfont</span>
+    </header>
+    <div class="panes">
+      <div class="pane" id="paneL">
+        <div class="label" id="labelL">the same text, set conventionally</div>
+        <div class="rule"></div>
+        <div class="body" id="bodyL"></div>
+      </div>
+      <div class="pane set" id="paneR">
+        <div class="label" id="labelR">set by semfont</div>
+        <div class="rule"></div>
+        <div class="body" id="bodyR"></div>
+      </div>
+    </div>
+  </div>
+  <div id="rings"></div>
+  <div id="caption"></div>
+  <div id="closing" hidden></div>
+</div>
+
+<script type="module">
+// analyze.js and theme.js import nothing at all, which is what lets this page
+// load the engine straight off disk with no bundler and no import map. Only
+// SemanticText.js needs React, and the stage does not render through React.
+import { analyze } from '../src/analyze.js';
+import { styleFor, themes } from '../src/theme.js';
+
+/* ------------------------------------------------------------------ copy */
+
+const INCIDENT =
+  'The deploy looked clean. In production it deleted the index, and the ' +
+  'rollback might have failed too. Nobody lost data, but the postmortem ' +
+  'is going to be painful.';
+
+const LAUNCH_PLAIN = 'The launch was great and the numbers were excellent.';
+
+// The two insertion points for the negation scene, as offsets into
+// LAUNCH_PLAIN. "not " is typed in at each, one character per step, and the
+// engine re-reads the sentence every frame.
+const NOT_AT = [LAUNCH_PLAIN.indexOf('great'), LAUNCH_PLAIN.indexOf('excellent')];
+
+/* ------------------------------------------------------------- geometry */
+
+const params = new URLSearchParams(location.search);
+const MODE = params.get('mode') === 'video' ? 'video' : 'gif';
+
+// One size table rather than media queries, because the recording is a fixed
+// viewport and a breakpoint that fires at the wrong width is a silent
+// difference between two runs.
+const LAYOUT = {
+  gif: {
+    // Shorter than the frame it replaces, because the legend strip that used
+    // to sit under the panes is gone and empty paper is wasted height on a
+    // phone, where most of these are watched.
+    width: 760, height: 424, fps: 12.5,
+    pad: 26, gap: 30, mark: 21, label: 13.5, body: 25.5,
+    captions: false,
+  },
+  video: {
+    width: 1280, height: 720, fps: 30,
+    pad: 46, gap: 52, mark: 30, label: 18, body: 31, code: 17,
+    captions: true,
+  },
+};
+
+const L = LAYOUT[MODE];
+
+const el = {
+  frame: document.getElementById('frame'),
+  world: document.getElementById('world'),
+  mark: document.getElementById('mark'),
+  paneL: document.getElementById('paneL'),
+  labelL: document.getElementById('labelL'),
+  bodyL: document.getElementById('bodyL'),
+  bodyR: document.getElementById('bodyR'),
+  panes: document.querySelector('.panes'),
+  rings: document.getElementById('rings'),
+  caption: document.getElementById('caption'),
+  closing: document.getElementById('closing'),
+};
+
+function applyLayout() {
+  el.frame.style.width = L.width + 'px';
+  el.frame.style.height = L.height + 'px';
+  el.world.style.left = L.pad + 'px';
+  el.world.style.top = L.pad + 'px';
+  el.world.style.width = (L.width - L.pad * 2) + 'px';
+  el.mark.style.fontSize = L.mark + 'px';
+  el.frame.style.setProperty('--gap', L.gap + 'px');
+
+  for (const q of document.querySelectorAll('.panes')) q.style.gap = L.gap + 'px';
+  for (const q of document.querySelectorAll('.label')) {
+    q.style.fontSize = L.label + 'px';
+    q.style.paddingBottom = Math.round(L.label * 0.62) + 'px';
+  }
+  for (const q of document.querySelectorAll('.body')) {
+    q.style.fontSize = L.body + 'px';
+    q.style.paddingTop = Math.round(L.body * 0.42) + 'px';
+  }
+  document.querySelector('.panes').style.marginTop = Math.round(L.mark * 1.5) + 'px';
+
+  el.caption.style.fontSize = Math.round(L.label * 1.02) + 'px';
+  el.caption.style.bottom = Math.round(L.pad * 0.75) + 'px';
+  el.caption.style.left = L.pad + 'px';
+  el.caption.style.right = L.pad + 'px';
+}
+
+applyLayout();
+
+/* ---------------------------------------------------------------- easing */
+
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/* ------------------------------------------------------------- rendering */
+
+/**
+ * Set one pane from a string.
+ *
+ * `styled` false renders the conventional pane: the identical string, the
+ * identical token spans, and no style object applied to any of them. That is
+ * the comparison the whole demo rests on, so the two panes deliberately share
+ * this one function rather than each having their own.
+ */
+function setPane(node, text, { styled, theme = 'editorial', lexicon, caret = false }) {
+  node.textContent = '';
+  const resolved = typeof theme === 'string' ? themes[theme] : theme;
+  const { tokens } = analyze(text, lexicon ? { lexicon } : {});
+
+  for (const token of tokens) {
+    const span = document.createElement('span');
+    span.textContent = token.text;
+    span.dataset.norm = token.norm ?? '';
+    if (styled) {
+      const s = styleFor(token, resolved);
+      if (s) Object.assign(span.style, s.style);
+    }
+    node.appendChild(span);
+  }
+
+  if (caret) {
+    const c = document.createElement('span');
+    c.className = 'caret';
+    c.textContent = '|';
+    node.appendChild(c);
+  }
+}
+
+function setCode(node, source) {
+  node.textContent = '';
+  node.className = 'body code';
+  node.style.fontSize = L.code + 'px';
+  const span = document.createElement('span');
+  span.textContent = source;
+  node.appendChild(span);
+  const c = document.createElement('span');
+  c.className = 'caret';
+  c.textContent = '|';
+  node.appendChild(c);
+}
+
+/**
+ * The JSX shown in the code scenes, derived from the very props object that
+ * drives the render beside it. Writing the snippet out by hand is how a demo
+ * ends up showing code that does not produce the picture next to it.
+ */
+function renderJSX(props) {
+  const attrs = ['as="p"'];
+  if (props.theme) attrs.push(`theme="${props.theme}"`);
+  let open = `<SemanticText ${attrs.join(' ')}`;
+
+  if (props.lexicon) {
+    // One channel per line, aligned under the brace, so no line outgrows its
+    // column at the size the code pane is set in.
+    const channels = Object.entries(props.lexicon).map(([channel, entries]) => {
+      const pairs = Object.entries(entries).map(([k, v]) => `${k}: ${v}`).join(', ');
+      return `${channel}: { ${pairs} }`;
+    });
+    open += `\n  lexicon={{ ${channels.join(',\n             ')} }}`;
+  }
+
+  open += '>';
+  return [
+    "import { SemanticText } from 'semfont'",
+    '',
+    open,
+    '  {incident}',
+    '</SemanticText>',
+  ].join('\n');
+}
+
+/* --------------------------------------------------------------- camera */
+
+let ringCount = 0;
+
+function clearOverlay() {
+  el.rings.textContent = '';
+  ringCount = 0;
+  for (const s of document.querySelectorAll('.body span')) s.classList.remove('dim');
+  el.world.style.transform = 'translate(0px, 0px) scale(1)';
+  el.world.style.opacity = '1';
+}
+
+/** Find the span for the nth occurrence of a normalised word inside a pane. */
+function findWord(node, norm, nth = 0) {
+  let seen = 0;
+  for (const span of node.querySelectorAll('span')) {
+    if (span.dataset.norm === norm) {
+      if (seen === nth) return span;
+      seen += 1;
+    }
+  }
+  return null;
+}
+
+/**
+ * Point the camera at one word.
+ *
+ * `amount` runs 0..1 so a move can be eased across frames rather than cut to.
+ * Both panes get a ring at the same word: the blue one on the right is what
+ * the caption is talking about, and the grey one on the left is the same word
+ * in the same sentence with nothing done to it.
+ *
+ * The camera frames the *pair*, not the styled word. Centring on the right
+ * pane and zooming hard pushes the conventional setting off the edge, and a
+ * comparison with one side missing is not a comparison.
+ */
+function focusWord(norm, amount, { zoom = 1.42 } = {}) {
+  const right = findWord(el.bodyR, norm);
+  const left = findWord(el.bodyL, norm);
+  if (!right) return;
+
+  const k = lerp(1, zoom, amount);
+  const frameRect = el.frame.getBoundingClientRect();
+  const worldRect = el.world.getBoundingClientRect();
+  const r = right.getBoundingClientRect();
+  const l = left?.getBoundingClientRect();
+
+  // Midpoint of the two rings, in unscaled world coordinates.
+  const minX = Math.min(r.left, l?.left ?? r.left);
+  const maxX = Math.max(r.right, l?.right ?? r.right);
+  const minY = Math.min(r.top, l?.top ?? r.top);
+  const maxY = Math.max(r.bottom, l?.bottom ?? r.bottom);
+  const cx = (minX + maxX) / 2 - worldRect.left;
+  const cy = (minY + maxY) / 2 - worldRect.top;
+
+  // Where the world's origin has to sit for that point to land in the middle
+  // of the frame at scale k.
+  const originX = L.pad;
+  const originY = L.pad;
+  const tx = lerp(0, frameRect.width / 2 - (originX + cx * k), amount);
+  const ty = lerp(0, frameRect.height / 2 - (originY + cy * k), amount);
+
+  el.world.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${k.toFixed(4)})`;
+
+  if (amount > 0.45) {
+    for (const span of document.querySelectorAll('.body span')) {
+      if (span !== right && span !== left) span.classList.add('dim');
+    }
+    drawRing(right, false);
+    if (left) drawRing(left, true);
+  }
+}
+
+function drawRing(span, flat) {
+  const frameRect = el.frame.getBoundingClientRect();
+  const r = span.getBoundingClientRect();
+  const pad = 5;
+  const ring = document.createElement('div');
+  ring.className = flat ? 'ring flat' : 'ring';
+  ring.style.left = (r.left - frameRect.left - pad) + 'px';
+  ring.style.top = (r.top - frameRect.top - pad) + 'px';
+  ring.style.width = (r.width + pad * 2) + 'px';
+  ring.style.height = (r.height + pad * 2) + 'px';
+  el.rings.appendChild(ring);
+  ringCount += 1;
+}
+
+function caption(text, alpha = 1) {
+  if (!L.captions) { el.caption.textContent = ''; return; }
+  el.caption.textContent = text ?? '';
+  el.caption.style.opacity = clamp01(alpha).toFixed(3);
+}
+
+/* -------------------------------------------------------------- timeline */
+
+/**
+ * A scene is a duration in seconds and a draw function taking `t`, the
+ * scene-local time in 0..1. Durations are converted to whole frames once, so
+ * a scene boundary always lands on a frame and never between two.
+ */
+function build(scenes) {
+  let start = 0;
+  const out = [];
+  for (const s of scenes) {
+    const frames = Math.round(s.seconds * L.fps);
+    out.push({ ...s, frames, start });
+    start += frames;
+  }
+  return { scenes: out, total: start };
+}
+
+/** Type `text` in, one character per frame-step, revealing a prefix. */
+const prefix = (text, t) => text.slice(0, Math.round(clamp01(t) * text.length));
+
+/** LAUNCH_PLAIN with `n` characters of "not " typed in at insertion `which`. */
+function withNots(firstChars, secondChars) {
+  const word = 'not ';
+  let s = LAUNCH_PLAIN;
+  // Right to left, so the first insertion does not move the second offset.
+  s = s.slice(0, NOT_AT[1]) + word.slice(0, secondChars) + s.slice(NOT_AT[1]);
+  s = s.slice(0, NOT_AT[0]) + word.slice(0, firstChars) + s.slice(NOT_AT[0]);
+  return s;
+}
+
+function bothPanes(text, opts = {}) {
+  setPane(el.bodyL, text, { styled: false, caret: opts.caret });
+  setPane(el.bodyR, text, { styled: true, caret: opts.caret, theme: opts.theme, lexicon: opts.lexicon });
+}
+
+function codeLayout(on) {
+  el.labelL.textContent = on ? 'what you write' : 'the same text, set conventionally';
+  el.panes.classList.toggle('with-code', on);
+  if (!on) {
+    el.bodyL.className = 'body';
+    el.bodyL.style.fontSize = L.body + 'px';
+  }
+}
+
+/* --------------------------------------------------------- the GIF cut */
+
+// Eleven seconds, looping, no captions and no legend: the panes and their two
+// labels carry the whole comparison, and a GIF that needs a sentence under it
+// to be understood has already failed.
+const GIF_SCENES = [
+  {
+    seconds: 4.0,
+    draw(t) {
+      codeLayout(false);
+      bothPanes(prefix(INCIDENT, t), { caret: true });
+    },
+  },
+  {
+    seconds: 2.2,
+    draw() {
+      bothPanes(INCIDENT);
+    },
+  },
+  {
+    seconds: 2.6,
+    draw(t) {
+      bothPanes(prefix(LAUNCH_PLAIN, t), { caret: true });
+    },
+  },
+  {
+    seconds: 1.4,
+    draw(t) {
+      // "not " into the first gap, then the second. The colour flip is the
+      // engine re-reading the sentence, not a fade.
+      const step = clamp01(t) * 8;
+      bothPanes(withNots(Math.min(4, Math.round(step)), Math.max(0, Math.round(step - 4))), { caret: true });
+    },
+  },
+  {
+    seconds: 1.0,
+    draw() {
+      bothPanes(withNots(4, 4));
+    },
+  },
+];
+
+/* ------------------------------------------------------- the video cut */
+
+// The lexicon entries are chosen so that the two words named in the code are
+// two words already on screen and previously untouched: the causal link is
+// then visible rather than asserted.
+const TEACH = { valence: { rollback: -0.7 }, salience: { index: 0.85 } };
+
+const CODE_SCENES = [
+  { props: { as: 'p' }, caption: 'four lines, and no markup in the text' },
+  {
+    props: { as: 'p', lexicon: TEACH },
+    caption: 'teach it two words, and two words change',
+  },
+  {
+    props: { as: 'p', theme: 'monochrome', lexicon: TEACH },
+    caption: 'monochrome: no colour at all',
+  },
+];
+
+/** One code scene: the JSX types in, then the paragraph beside it is set. */
+function drawCodeScene(idx, t) {
+  const scene = CODE_SCENES[idx];
+  const source = renderJSX(scene.props);
+  codeLayout(true);
+  const typing = clamp01(t / 0.42);
+  setCode(el.bodyL, prefix(source, typing));
+  setPane(el.bodyR, INCIDENT, {
+    styled: true,
+    theme: scene.props.theme ?? 'editorial',
+    lexicon: scene.props.lexicon,
+  });
+  caption(scene.caption, clamp01((t - 0.45) / 0.12));
+}
+
+const TOUR = [
+  { word: 'deleted', caption: 'salience → weight and size' },
+  { word: 'failed', caption: 'valence → colour' },
+  { word: 'postmortem', caption: 'surprise → highlight' },
+  { word: 'might', caption: 'certainty → slant' },
+];
+
+/** One leg of the camera tour: travel in, hold, and the caption comes with it. */
+function drawTourLeg(leg, t) {
+  bothPanes(INCIDENT);
+  const travel = clamp01(t / 0.25);
+  focusWord(leg.word, ease(travel));
+  caption(leg.caption, clamp01((t - 0.16) / 0.1));
+}
+
+const VIDEO_SCENES = [
+  // Open the way the GIF does, because that framing is the one that read.
+  {
+    seconds: 4.8,
+    draw(t) {
+      codeLayout(false);
+      bothPanes(prefix(INCIDENT, t), { caret: true });
+      caption('', 0);
+    },
+  },
+  {
+    seconds: 1.4,
+    draw(t) {
+      bothPanes(INCIDENT);
+      caption('nothing in that paragraph was marked up', clamp01(t / 0.25));
+    },
+  },
+  ...TOUR.map((leg) => ({ seconds: 3.9, draw: (t) => drawTourLeg(leg, t) })),
+  {
+    seconds: 1.4,
+    draw(t) {
+      bothPanes(INCIDENT);
+      focusWord('might', ease(1 - clamp01(t / 0.7)));
+      caption('four channels, four axes, one pass', clamp01((t - 0.4) / 0.2));
+    },
+  },
+  // Negation. The sentence is retyped from scratch so the viewer sees it
+  // arrive positive before it is turned.
+  {
+    seconds: 4.8,
+    draw(t) {
+      bothPanes(prefix(LAUNCH_PLAIN, clamp01(t / 0.66)), { caret: true });
+      caption(t > 0.72 ? 'the engine reads this one positive' : '', clamp01((t - 0.72) / 0.14));
+    },
+  },
+  {
+    seconds: 7.6,
+    draw(t) {
+      const step = clamp01(t / 0.3) * 8;
+      const text = withNots(Math.min(4, Math.round(step)), Math.max(0, Math.round(step - 4)));
+      bothPanes(text, { caret: t < 0.34 });
+      if (t > 0.4) focusWord('great', ease(clamp01((t - 0.4) / 0.14)), { zoom: 1.34 });
+      caption(
+        t > 0.62 ? '"not great" is a complaint, not a catastrophe' : 'two words in, and it turns',
+        1,
+      );
+    },
+  },
+  // The code act: same two columns, the left one becomes what you type.
+  ...CODE_SCENES.map((_, i) => ({
+    seconds: i === 1 ? 8.6 : 7.2,
+    draw: (t) => drawCodeScene(i, t),
+  })),
+  {
+    seconds: 6.0,
+    draw(t) {
+      codeLayout(false);
+      bothPanes(INCIDENT);
+      caption('', 0);
+      // Out, then in. Dissolving one onto the other leaves a stretch where
+      // both are legible at once and neither can be read.
+      el.world.style.opacity = (1 - clamp01(t / 0.1)).toFixed(3);
+      el.closing.hidden = t < 0.1;
+      el.closing.style.opacity = clamp01((t - 0.1) / 0.08).toFixed(3);
+    },
+  },
+];
+
+el.closing.innerHTML =
+  `<div style="font-size:${Math.round(L.mark * 1.5)}px;font-weight:700">semfont</div>` +
+  `<div style="font-size:${Math.round(L.body * 0.72)}px;color:var(--dim)">typography that modulates on meaning</div>` +
+  `<div style="font-size:${Math.round(L.body * 0.6)}px;color:var(--dim);margin-top:0.6em">` +
+  'no model · no network · runs on every keystroke</div>' +
+  `<div style="font-size:${Math.round(L.body * 0.6)}px;margin-top:1.2em">github.com/RohanAdwankar/semfont</div>`;
+
+const TIMELINE = build(MODE === 'gif' ? GIF_SCENES : VIDEO_SCENES);
+
+/* ------------------------------------------------------------------ seek */
+
+/**
+ * Put the page into the state for frame `i`. Pure: calling seek(n) after
+ * seek(m) gives the same pixels as calling seek(n) first.
+ */
+function seek(i) {
+  const frame = Math.max(0, Math.min(TIMELINE.total - 1, i | 0));
+  clearOverlay();
+  el.closing.hidden = true;
+  caption('', 0);
+
+  for (const scene of TIMELINE.scenes) {
+    if (frame >= scene.start && frame < scene.start + scene.frames) {
+      // Sample each scene at the centre of its frame rather than at its
+      // leading edge, so a one-frame scene is not stuck at t = 0.
+      const t = scene.frames <= 1 ? 0 : (frame - scene.start) / (scene.frames - 1);
+      scene.draw(t);
+      return;
+    }
+  }
+}
+
+window.seek = seek;
+window.FRAMES = TIMELINE.total;
+window.MODE = MODE;
+window.STAGE = { width: L.width, height: L.height, fps: L.fps };
+window.SCENES = TIMELINE.scenes.map((s) => ({ start: s.start, frames: s.frames }));
+
+await document.fonts.ready;
+seek(0);
+window.READY = true;
+</script>
