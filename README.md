@@ -4,7 +4,7 @@ Typography that modulates on meaning instead of on markup. Negative things
 render red, important things get heavier, surprising things get highlighted,
 hedged things lean, and nothing in the pipeline is a model.
 
-![the same paragraph set twice, side by side: on the left every word is the same grey, on the right clean comes out green, production and deleted come out heavy, might leans, postmortem is highlighted and failed and painful come out red; then the sentence is negated and the two green words on the right turn red](demo/demo.gif)
+![two panes of the same paragraph side by side, labelled the same text set conventionally and set by semfont: on the left every word is the same grey, on the right clean comes out green, production and deleted come out heavy, might leans, postmortem is highlighted and failed and painful come out red; then a second sentence is typed in green and two nots are dropped into it, and it turns red](demo/demo.gif)
 
 ```jsx
 import { SemanticText } from 'semfont';
@@ -15,9 +15,25 @@ import { SemanticText } from 'semfont';
 </SemanticText>
 ```
 
-No markup went in. `clean` comes out green, `deleted` heavier, `failed` red,
-and the clause after `but` is highlighted, because the engine read the
-sentence.
+No markup went in. `clean` comes out green, `deleted` heavier and larger, and
+`failed` red, because the engine read the sentence.
+
+## What this is not
+
+The closest things a reader already has, and why each is a different shape of
+problem:
+
+| you might reach for | what it keys on | why this is not that |
+|---|---|---|
+| syntax highlighting | grammar, from a parser | the categories are fixed by the language. Prose has no keywords, and `failed` is not a token type |
+| Bionic Reading | word position, first *n* letters | one rule applied uniformly. It never reads a word, so every word gets the same treatment |
+| a sentiment dashboard | a document, after the fact | reports a number about your text somewhere else. This sets the text itself, in place, as you write it |
+| `<em>` and `<strong>` | your decision, hand-made | the file keeps the emphasis and forgets the reason, so it stays put when the sentence changes |
+| an LLM | everything, better | see below. It reads sarcasm; it cannot run inside a keystroke |
+| variable font sliders | nothing | a control surface, not a decision. Something still has to decide what `wght` should be for this word |
+
+The line through all of them: this is the only one where the typography is a
+*function of the sentence*, recomputed whenever the sentence changes.
 
 ## Why not an LLM
 
@@ -177,26 +193,41 @@ for print, e-ink, and for the fact that colour alone is not an accessible
 channel. `technical` adds the fifth channel on `MONO`, so identifiers shift
 toward monospace, and puts hedges on `CASL` as well as `slnt`.
 
-## The post
-
-`index.html` at the repo root is the write-up, and the engine sets all of it:
-every word of the prose is scored and styled at load, the rail re-runs the
-whole page when you change a channel, the sensitivity or the theme, and the box
-at the top takes the reader's own text. It imports `src/` directly, so there is
-no copy of the engine to keep in sync and no build step. Serve the repo and
-open `/`, or turn on GitHub Pages for `main` to publish it as-is. `POST.md` is
-the same words in plain Markdown.
-
 ## Running it
 
 ```bash
 node --test test/*.test.js      # engine + theme tests, no dependencies
 npm install react react-dom     # only for the React render tests
-python3 -m http.server          # then open / for the post, /demo/ for the demo
+python3 -m http.server          # then open /demo/, or / for a whole page of it
 ```
 
-The demo is the fastest way to see it: five sample passages, live editing,
+`demo/` is the fastest way to see it: five sample passages, live editing,
 per-channel toggles, and a hover readout of every score.
+
+`index.html` at the root is the engine set loose on a whole page. Every word of
+it is scored and styled at load, the rail re-runs the page when you change a
+channel, the sensitivity or the theme, and the box at the top takes your own
+text. It imports `src/` directly, so there is no second copy of the engine and
+no build step.
+
+## Recording the demo
+
+```bash
+node demo/capture.mjs gif        # demo/demo.gif, the one above
+node demo/capture.mjs video      # demo/demo.mp4, not checked in
+```
+
+`demo/capture.html` is a recording stage that holds one state per frame and
+exposes `seek(i)`. There are no timers, no CSS transitions and no wall-clock
+reads anywhere in it, so every motion is a pure function of the frame index and
+a second run produces the same file as the first. It sets its own type through
+`analyze()` and `styleFor()` rather than by hand, so the recording cannot drift
+away from what the library actually does.
+
+Needs Playwright and an ffmpeg with `libx264`. The variable font is fetched
+once into `demo/.fonts/`. That directory, the intermediate frames and the video
+are all ignored: the GIF above is the only recorded file this repo carries, and
+everything else is reproducible from `capture.html` whenever it is wanted.
 
 `src/` has no dependencies and no build step. It is ESM that runs in Node and
 in the browser as-is, using `createElement` rather than JSX so it needs no
