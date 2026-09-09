@@ -41,6 +41,11 @@ export const renderers = {
     style.borderRadius = '0.18em';
     style.boxShadow = `0 0 0 0.12em ${paint}`;
   },
+  // `slnt` runs from 0 to a negative number, never upward: Roboto Flex is
+  // -10..0 and Recursive -15..0. A row with a positive `max` therefore asks
+  // for a value every real font clamps to 0, and the channel disappears
+  // without erroring. Rows accumulate here, so a positive one does not merely
+  // vanish, it cancels a negative one sharing the axis.
   slant(strength, signed, row, style, axes) {
     axes.slnt = (axes.slnt ?? 0) + strength * (row.max ?? -9);
   },
@@ -101,20 +106,27 @@ export const themes = {
     ],
   },
 
-  // No colour at all: weight, size, slant and tracking carry every channel.
-  // Print, e-ink, and the honest answer to "colour is not an accessible
-  // channel on its own".
+  // No colour at all: slant, weight, size, an underline and tracking carry
+  // every channel. Print, e-ink, and the honest answer to "colour alone is not
+  // an accessible channel".
+  //
+  // Colour is the roomiest axis there is, so taking it away is what makes the
+  // one-channel-one-axis rule bite: with four channels and no colour, two of
+  // them wanting `slnt` is not a near miss, it is a silent loss. Valence gets
+  // `slnt` because it is the channel with nowhere else to go, and certainty
+  // rides `tracking` in both directions instead, loosening when hedged and
+  // tightening when assertive.
   monochrome: {
     name: 'monochrome',
     thresholds: { valence: 0.2, salience: 0.3, surprise: 0.35, certainty: 0.35, technicality: 0.5 },
     variableAxes: true,
     map: [
-      { channel: 'valence', render: 'slant', side: 'negative', max: 8 },
+      { channel: 'valence', render: 'slant', side: 'negative', max: -8 },
       { channel: 'salience', render: 'weight', base: 380, range: 400 },
       { channel: 'salience', render: 'size', range: 0.18 },
       { channel: 'surprise', render: 'underline', max: 0.06 },
-      { channel: 'certainty', render: 'slant', side: 'negative', max: -9 },
       { channel: 'certainty', render: 'fade', side: 'negative', max: 0.28 },
+      { channel: 'certainty', render: 'tracking', side: 'negative', max: 0.02 },
       { channel: 'certainty', render: 'tracking', side: 'positive', max: -0.02 },
     ],
   },

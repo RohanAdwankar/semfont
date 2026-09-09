@@ -172,9 +172,12 @@ into the HTML and ship no JavaScript at all.
 `editorial` is deliberately quiet: high thresholds, small ranges, most words
 left completely alone. If every word is styled, none of them is emphasised.
 `loud` turns the same scores up for a headline or a demo. `monochrome` emits
-no colour at all: weight, size, slant and an underline carry all four channels,
-for print, e-ink, and for the fact that colour alone is not an accessible
-channel. `technical` adds the fifth channel on `MONO`, so identifiers shift
+no colour at all, for print, e-ink, and for the fact that colour alone is not
+an accessible channel. Losing colour means the four channels have to be
+re-seated rather than merely recoloured, so valence takes the slant, salience
+keeps weight and size, surprise takes an underline, and certainty rides
+tracking in both directions, loosening when hedged and tightening when
+assertive. `technical` adds the fifth channel on `MONO`, so identifiers shift
 toward monospace, and puts hedges on `CASL` as well as `slnt`.
 
 ## The post

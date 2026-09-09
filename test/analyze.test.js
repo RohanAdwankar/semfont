@@ -107,6 +107,78 @@ test('the monochrome theme never emits colour', () => {
   }
 });
 
+// A scored token, straight into styleFor, so one channel can be moved at a
+// time. Going through analyze() makes it very hard to isolate a channel, which
+// is part of why the theme maps were only ever tested for what they do not do.
+const scored = (channels) => ({
+  kind: 'word',
+  text: 'word',
+  valence: 0,
+  salience: 0,
+  surprise: 0,
+  certainty: 0,
+  technicality: 0,
+  ...channels,
+});
+
+test('the monochrome theme carries all four channels, not just three', () => {
+  // The point of this theme is that colour is not an accessible channel on its
+  // own, which is worth nothing if taking colour away silently drops one.
+  for (const channel of ['valence', 'salience', 'surprise', 'certainty']) {
+    const out = styleFor(scored({ [channel]: -0.9 }), themes.monochrome)
+      ?? styleFor(scored({ [channel]: 0.9 }), themes.monochrome);
+    assert.ok(out, `monochrome renders nothing at all for ${channel}`);
+    assert.ok(Object.keys(out.style).length > 0, `monochrome emits no property for ${channel}`);
+  }
+});
+
+test('slant axes only go negative, in every theme', () => {
+  // `slnt` is 0..-10 on Roboto Flex and 0..-15 on Recursive. A positive value
+  // is clamped to 0 by the font, so the row renders as nothing at all.
+  //
+  // One channel at a time on purpose. Scoring two of them together is what hid
+  // this: monochrome's positive valence slant and negative certainty slant
+  // summed to a negative number, so a token carrying both looked fine.
+  for (const [name, theme] of Object.entries(themes)) {
+    for (const channel of ['valence', 'salience', 'surprise', 'certainty', 'technicality']) {
+      for (const sign of [-0.9, 0.9]) {
+        const slnt = styleFor(scored({ [channel]: sign }), theme)?.axes.slnt;
+        if (slnt === undefined) continue;
+        assert.ok(slnt <= 0, `${name} puts ${channel} at slnt ${slnt}, which no font can render`);
+      }
+    }
+  }
+});
+
+test('no theme drives one axis from two different channels', () => {
+  // Rows accumulate per axis, so two channels on one axis do not merely become
+  // ambiguous, they add: monochrome had valence and certainty both on `slnt`
+  // with opposite signs, and a word that was negative *and* hedged came out
+  // upright because the two cancelled.
+  for (const [name, theme] of Object.entries(themes)) {
+    const owner = new Map();
+    for (const row of theme.map) {
+      const held = owner.get(row.render);
+      assert.ok(
+        held === undefined || held === row.channel,
+        `${name} drives ${row.render} from both ${held} and ${row.channel}`,
+      );
+      owner.set(row.render, row.channel);
+    }
+  }
+});
+
+test('a second channel never cancels the first on a shared axis', () => {
+  // The behavioural half of the rule above, in the case that actually bit.
+  const hedged = styleFor(scored({ certainty: -0.9 }), themes.monochrome);
+  const hedgedAndNegative = styleFor(scored({ certainty: -0.9, valence: -0.9 }), themes.monochrome);
+  const lean = (out) => Math.abs(out?.axes.slnt ?? 0);
+  assert.ok(
+    lean(hedgedAndNegative) >= lean(hedged),
+    'adding negative valence reduced the lean instead of leaving it alone',
+  );
+});
+
 test('technicality is decided by shape, not by a word list alone', () => {
   const shaped = 'the readFileSync call and the cluster_config value and p99 itself';
   const { tokens } = analyze(shaped);
