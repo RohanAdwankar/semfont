@@ -213,25 +213,6 @@ channel, the sensitivity or the theme, and the box at the top takes your own
 text. It imports `src/` directly, so there is no second copy of the engine and
 no build step.
 
-## Recording the demo
-
-```bash
-node demo/capture.mjs gif        # demo/demo.gif, the one above
-node demo/capture.mjs video      # demo/demo.mp4, not checked in
-```
-
-`demo/capture.html` is a recording stage that holds one state per frame and
-exposes `seek(i)`. There are no timers, no CSS transitions and no wall-clock
-reads anywhere in it, so every motion is a pure function of the frame index and
-a second run produces the same file as the first. It sets its own type through
-`analyze()` and `styleFor()` rather than by hand, so the recording cannot drift
-away from what the library actually does.
-
-Needs Playwright and an ffmpeg with `libx264`. The variable font is fetched
-once into `demo/.fonts/`. That directory, the intermediate frames and the video
-are all ignored: the GIF above is the only recorded file this repo carries, and
-everything else is reproducible from `capture.html` whenever it is wanted.
-
 `src/` has no dependencies and no build step. It is ESM that runs in Node and
 in the browser as-is, using `createElement` rather than JSX so it needs no
 transform. React is a peer, and only `SemanticText.js` imports it.
