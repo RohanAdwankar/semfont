@@ -1,4 +1,45 @@
 {
   "name": "semfont",
-  "type": "module"
+  "version": "0.1.0",
+  "description": "Typography that modulates on meaning instead of markup. Negative things go red, important things get heavier, surprising things get highlighted, hedged things lean. No model, one millisecond, no dependencies.",
+  "license": "MIT",
+  "author": "Rohan Adwankar",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./analyze": "./src/analyze.js",
+    "./theme": "./src/theme.js",
+    "./lexicon": "./src/lexicon.js"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RohanAdwankar/semfont.git"
+  },
+  "homepage": "https://github.com/RohanAdwankar/semfont#readme",
+  "bugs": "https://github.com/RohanAdwankar/semfont/issues",
+  "keywords": [
+    "typography",
+    "variable-fonts",
+    "sentiment",
+    "semantic",
+    "react",
+    "text",
+    "emphasis"
+  ]
 }

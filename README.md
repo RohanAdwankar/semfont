@@ -72,8 +72,20 @@ topic terms of a paragraph float up without anyone tagging them.
 
 ## API
 
+```bash
+npm install semfont          # react is a peer, only needed for the component
+```
+
 ```js
 import { SemanticText, useSemanticText, analyze, themes, styleFor } from 'semfont';
+```
+
+The root import needs React present, because it exports the component. For
+the engine alone, with no React installed at all, import the subpaths:
+
+```js
+import { analyze } from 'semfont/analyze';
+import { styleFor, themes } from 'semfont/theme';
 ```
 
 `<SemanticText>` props:
