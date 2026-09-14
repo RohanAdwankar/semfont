@@ -19,6 +19,8 @@ export const VALENCE = {
   stuck: -0.5, blocked: -0.5, dead: -0.6, deprecated: -0.35, abandoned: -0.6,
   never: -0.2, cannot: -0.3, unusable: -0.8, unreadable: -0.6, illegible: -0.6,
   noise: -0.35, noisy: -0.4, clutter: -0.4, tedious: -0.5, boring: -0.45,
+  complaint: -0.5, complaints: -0.5, catastrophic: -0.9, hole: -0.3,
+  fail: -0.7, disappointing: -0.6, disappointed: -0.6,
   // positive
   great: 0.75, good: 0.5, excellent: 0.85, wonderful: 0.85, lovely: 0.7,
   delightful: 0.8, beautiful: 0.8, elegant: 0.75, clean: 0.5, crisp: 0.55,
@@ -30,6 +32,8 @@ export const VALENCE = {
   win: 0.6, wins: 0.6, useful: 0.55, helpful: 0.55, powerful: 0.6, free: 0.4,
   open: 0.3, tiny: 0.3, small: 0.2, thanks: 0.6, welcome: 0.5, ship: 0.35,
   shipped: 0.5, green: 0.4, passing: 0.45, passed: 0.45, ready: 0.4,
+  recovered: 0.5, resolved: 0.6, avoided: 0.35, prevented: 0.35, survived: 0.5,
+  mitigated: 0.4, gone: 0.1,
 };
 
 /** salience: how much the word is asking to be looked at. 0..1 */

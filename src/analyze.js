@@ -18,6 +18,7 @@ import {
   VALENCE, SALIENCE, SURPRISE, CERTAINTY, TECHNICAL, CONTRAST,
   INTENSIFIERS, NEGATORS, lookup, rarity,
 } from './lexicon.js';
+import { deepen } from './deep.js';
 
 // Underscores stay inside a word: cluster_config is one identifier, and
 // splitting it hides exactly the shape the technicality channel reads.
@@ -109,9 +110,11 @@ function* lookBehind(tokens, from, span) {
 /**
  * Score a passage.
  * @param {string} text
- * @param {{lexicon?: object, sensitivity?: number}} [options]
+ * @param {{lexicon?: object, sensitivity?: number, depth?: 'fast'|'deep'}} [options]
  *   lexicon merges extra entries into any of the four tables:
  *   `{ valence: {...}, salience: {...}, surprise: {...}, certainty: {...} }`
+ *   depth 'deep' re-derives valence over clauses after the fast pass; see
+ *   deep.js for what that buys and what it costs.
  */
 export function analyze(text, options = {}) {
   const sensitivity = options.sensitivity ?? 1;
@@ -181,11 +184,18 @@ export function analyze(text, options = {}) {
     if (sentence.exclaimed) gain *= 1.15;
 
     // valence, then negation flips it. "not great" is mildly bad, not the
-    // mirror image of great, hence the damping.
+    // mirror image of great, hence the damping. A one-word "No," is an
+    // answer to the previous question, not a negator of what follows.
     let v = lookup(valence, t.norm) ?? 0;
+    t.raw = v;
+    t.gain = gain;
     if (v !== 0) {
       for (const prev of lookBehind(tokens, t.index, NEGATION_WINDOW)) {
-        if (NEGATORS.has(prev.norm)) { v = -v * 0.74; break; }
+        if (!NEGATORS.has(prev.norm)) continue;
+        const after = tokens[prev.index + 1];
+        if (prev.norm === 'no' && after?.kind === 'punct' && after.text.startsWith(',')) continue;
+        v = -v * 0.74;
+        break;
       }
       t.valence = clamp(v * gain * sensitivity, -1, 1);
     }
@@ -221,7 +231,8 @@ export function analyze(text, options = {}) {
     t.technicality = clamp01(technicality(t, technical) * sensitivity);
   }
 
-  return { text, tokens, sentences, stats: { meanRarity, words: content.length } };
+  const result = { text, tokens, sentences, stats: { meanRarity, words: content.length } };
+  return options.depth === 'deep' ? deepen(result, options) : result;
 }
 
 /** Passage-level readout, handy for a document outline or a debug panel. */
