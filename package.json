@@ -1,7 +1,7 @@
 {
   "name": "semfont",
   "version": "0.1.0",
-  "description": "Typography that modulates on meaning instead of markup. Negative things go red, important things get heavier, surprising things get highlighted, hedged things lean. No model, one millisecond, no dependencies.",
+  "description": "Typography that modulates on meaning",
   "license": "MIT",
   "author": "Rohan Adwankar",
   "type": "module",
