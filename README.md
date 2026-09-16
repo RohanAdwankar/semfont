@@ -243,6 +243,22 @@ tracking in both directions, loosening when hedged and tightening when
 assertive. `technical` adds the fifth channel on `MONO`, so identifiers shift
 toward monospace, and puts hedges on `CASL` as well as `slnt`.
 
+## A chat that sets replies as they stream
+
+`examples/chat/` is a Vite and React page on the [AI SDK](https://ai-sdk.dev):
+`useChat` for the stream, `SemanticText` around the text of each assistant
+message, and any model behind the OpenAI chat completions API, OpenRouter by
+default. It ships a mock model server that speaks the same API, so the whole
+thing runs with no key:
+
+```bash
+cd examples/chat && npm install
+npm run mock                                   # a stand-in model on :8787
+LLM_BASE_URL=http://localhost:8787/v1 npm run dev
+```
+
+See `examples/chat/README.md`.
+
 ## Running it
 
 ```bash
