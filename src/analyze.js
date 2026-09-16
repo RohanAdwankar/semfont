@@ -110,11 +110,14 @@ function* lookBehind(tokens, from, span) {
 /**
  * Score a passage.
  * @param {string} text
- * @param {{lexicon?: object, sensitivity?: number, depth?: 'fast'|'deep'}} [options]
+ * @param {{lexicon?: object, sensitivity?: number}} [options]
  *   lexicon merges extra entries into any of the four tables:
  *   `{ valence: {...}, salience: {...}, surprise: {...}, certainty: {...} }`
- *   depth 'deep' re-derives valence over clauses after the fast pass; see
- *   deep.js for what that buys and what it costs.
+ *
+ * Two passes: a lexicon lookup with a fixed window per word, then the clause
+ * pass in deep.js, which re-derives valence over whole clauses. Together they
+ * run in under a millisecond per hundred words, linear in the text; see the
+ * budget in the README.
  */
 export function analyze(text, options = {}) {
   const sensitivity = options.sensitivity ?? 1;
@@ -232,7 +235,7 @@ export function analyze(text, options = {}) {
   }
 
   const result = { text, tokens, sentences, stats: { meanRarity, words: content.length } };
-  return options.depth === 'deep' ? deepen(result, options) : result;
+  return deepen(result, options);
 }
 
 /** Passage-level readout, handy for a document outline or a debug panel. */

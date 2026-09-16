@@ -1,14 +1,13 @@
-// The deep tier.
+// The clause pass.
 //
-// The fast tier scores a word from its own lexicon entry and a fixed window of
-// two or three neighbours. That is what makes it a millisecond, and it is
-// also why it reads "fixed the crash" as one good word and one bad word, or
-// leaves "great" green six words after a "not". This pass runs after it and
-// re-derives valence over clauses instead of windows. Still no model, still
-// synchronous and deterministic; on a page of prose it costs about as much
-// again as the fast tier.
+// The first pass in analyze.js scores a word from its own lexicon entry and a
+// fixed window of two or three neighbours. On its own that reads "fixed the
+// crash" as one good word and one bad word, and leaves "great" green six
+// words after a "not". This pass runs after it and re-derives valence over
+// clauses instead of windows. Still no model, still synchronous and
+// deterministic, and about half the total cost of analyze().
 //
-// Five rules, each of which the fast tier cannot express:
+// Five rules, none of which a fixed window can express:
 //
 //   scope       a negator flips everything to the end of its clause, fading
 //               with distance, and cancels against a second negator
@@ -103,7 +102,7 @@ function isAnswerParticle(tokens, t) {
 }
 
 /**
- * Re-derive valence over clauses. Mutates the tokens of a fast-tier result
+ * Re-derive valence over clauses. Mutates the tokens of a first-pass result
  * and returns it. Needs `token.raw` (the lexicon value) and `token.gain`
  * (intensifier and shouting), which analyze() records for this purpose.
  */

@@ -195,17 +195,30 @@ kind. And because `analyze()` is synchronous and pure, the component renders
 under `renderToStaticMarkup`, so a static site can prerender the typography
 into the HTML and ship no JavaScript at all.
 
-## Two tiers
+## Speed
 
-`analyze()` is the fast tier: a lexicon entry per word and a fixed window of
-two or three neighbours. About a millisecond a page. It reads `fixed the crash`
-as one good word and one bad word, leaves `great` green six words after a
-`not`, and takes `Great, another outage` at face value.
+`analyze()` runs in under a millisecond per hundred words on a laptop, linear
+in the length of the text, and that is a budget rather than a measurement. A
+rule that would put the default engine over it does not go in. If one earns
+its place at a higher cost it ships as a separate model, selected explicitly,
+so the default never gets slower.
 
-`analyze(text, { depth: 'deep' })` runs a second pass over clauses instead of
-windows. Still no model, still deterministic, about twice the cost. Five rules:
+```bash
+npm run bench                 # ms per hundred words on this README
+npm run bench -- essay.md     # or on your own text
+```
 
-| rule | example | fast | deep |
+## Two passes
+
+The first pass gives each word its lexicon entry and a fixed window of two or
+three neighbours. On its own that reads `fixed the crash` as one good word and
+one bad word, leaves `great` green six words after a `not`, and takes `Great,
+another outage` at face value.
+
+The second pass re-derives valence over clauses instead of windows. Still no
+model, still deterministic, about half the total cost. Five rules:
+
+| rule | example | window alone | with the clause pass |
 |---|---|---|---|
 | a negator reaches to the end of its clause | I would not go so far as to call it great | great | ~~great~~ |
 | a resolver flips the harm it resolves | we fixed the crash; the leak is gone | crash, leak | crash, leak |
@@ -213,17 +226,9 @@ windows. Still no model, still deterministic, about twice the cost. Five rules:
 | too turns praise into a complaint | too simple | simple | simple |
 | a lone opener before bad news is sarcasm; a quote the writer calls wrong is not the writer's word | Great, another outage. / called it "terrible", which is wrong | Great, terrible | Great, terrible |
 
-Every change the deep pass makes is written to `token.notes`, so a debug
+Every change the clause pass makes is written to `token.notes`, so a debug
 panel can say why a word came out the colour it did:
 `['resolved by "fixed"']`.
-
-```jsx
-<SemanticText depth="deep" text={incident} />
-```
-
-The React binding takes the same `depth` prop. Pick `deep` for anything a
-reader will stare at, and `fast` for anything that re-renders on a keystroke
-over a long document.
 
 ## Themes
 

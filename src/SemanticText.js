@@ -24,15 +24,15 @@ function resolveTheme(theme) {
  * only the words that actually earned typography get their own element.
  */
 export function useSemanticText(text, options = {}) {
-  const { theme, lexicon, sensitivity, channels, depth } = options;
+  const { theme, lexicon, sensitivity, channels } = options;
   // Themes and lexicons are plain data, so one stringify is a sound cache key
   // and callers do not have to memoize the objects they pass in.
-  const key = JSON.stringify([text, theme, lexicon, sensitivity, channels, depth]);
+  const key = JSON.stringify([text, theme, lexicon, sensitivity, channels]);
 
   return useMemo(() => {
     const resolved = resolveTheme(theme);
     const enabled = channels ?? ALL_CHANNELS;
-    const result = analyze(text ?? '', { lexicon, sensitivity, depth });
+    const result = analyze(text ?? '', { lexicon, sensitivity });
 
     for (const t of result.tokens) {
       for (const c of ALL_CHANNELS) if (!enabled.includes(c)) t[c] = 0;
@@ -64,7 +64,6 @@ export function useSemanticText(text, options = {}) {
  * @param {object} [props.lexicon] extra entries, per channel, merged over the defaults
  * @param {number} [props.sensitivity] global gain on every score, default 1
  * @param {string[]} [props.channels] which channels may style, default all four
- * @param {'fast'|'deep'} [props.depth] 'deep' re-derives valence over clauses; default 'fast'
  * @param {string} [props.as] element to render, default 'span'
  * @param {boolean} [props.debug] emit data-* attributes with the scores
  * @param {(summary: object) => void} [props.onAnalyze] passage-level readout
@@ -76,7 +75,6 @@ export function SemanticText({
   lexicon,
   sensitivity,
   channels,
-  depth,
   as = 'span',
   debug = false,
   onAnalyze,
@@ -85,7 +83,7 @@ export function SemanticText({
   ...rest
 }) {
   const source = typeof text === 'string' ? text : childrenToString(children);
-  const { runs, summary } = useSemanticText(source, { theme, lexicon, sensitivity, channels, depth });
+  const { runs, summary } = useSemanticText(source, { theme, lexicon, sensitivity, channels });
 
   useEffect(() => {
     if (onAnalyze) onAnalyze(summary);

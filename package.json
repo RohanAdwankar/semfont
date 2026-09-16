@@ -1,6 +1,6 @@
 {
   "name": "semfont",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Typography that modulates on meaning",
   "license": "MIT",
   "author": "Rohan Adwankar",
@@ -25,7 +25,8 @@
     }
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "bench": "node test/bench.mjs"
   },
   "repository": {
     "type": "git",

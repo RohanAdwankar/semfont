@@ -3,30 +3,27 @@ import assert from 'node:assert/strict';
 
 import { analyze } from '../src/analyze.js';
 
-const v = (text, word, depth = 'deep') => {
-  const t = analyze(text, { depth }).tokens.find((tok) => tok.norm === word);
+const v = (text, word) => {
+  const t = analyze(text).tokens.find((tok) => tok.norm === word);
   assert.ok(t, `no token ${word} in ${JSON.stringify(text)}`);
   return t.valence;
 };
 
-// The ten sentences the fast tier gets wrong, each a different mechanism.
+// The ten sentences a fixed window gets wrong, each a different mechanism.
 test('sarcasm: a lone positive opener before bad news', () => {
   const text = 'Great, another outage. Just what I needed today.';
-  assert.ok(v(text, 'great', 'fast') > 0, 'fast reads the praise literally');
   assert.ok(v(text, 'great') < 0);
   assert.ok(v(text, 'needed') < 0);
 });
 
 test('a resolver flips the harm it resolves', () => {
   const text = 'We fixed the crash and closed the security hole before anyone noticed.';
-  assert.ok(v(text, 'crash', 'fast') < 0);
   assert.ok(v(text, 'crash') > 0);
   assert.ok(v(text, 'hole') > 0);
 });
 
-test('a one-word "No," is an answer, not a negator (both tiers)', () => {
+test('a one-word "No," is an answer, not a negator', () => {
   const text = 'Did it fail? No, it passed every test.';
-  assert.ok(v(text, 'passed', 'fast') > 0);
   assert.ok(v(text, 'passed') > 0);
   assert.ok(v(text, 'fail') < 0);
 });
@@ -42,7 +39,6 @@ test('a risk that was avoided', () => {
 
 test('negation reaches to the end of the clause', () => {
   const text = 'I would not go so far as to call the new editor great.';
-  assert.ok(v(text, 'great', 'fast') > 0, 'fast stops at three words');
   assert.ok(v(text, 'great') < 0);
 });
 
@@ -66,11 +62,10 @@ test('a quoted word the writer rejects', () => {
 
 test('too turns praise into a complaint', () => {
   const text = 'The API is too simple and the docs are too clever.';
-  assert.ok(v(text, 'simple', 'fast') > 0);
   assert.ok(v(text, 'simple') < 0);
 });
 
-// What the deep tier must leave alone.
+// What the clause pass must leave alone.
 test('a resolver does not reach past a contrast', () => {
   const text = 'We fixed the crash but introduced a worse one.';
   assert.ok(v(text, 'crash') > 0);
@@ -79,7 +74,7 @@ test('a resolver does not reach past a contrast', () => {
 
 test('negation stops at the clause', () => {
   const text = 'Not great, but the docs are great.';
-  const [first, second] = analyze(text, { depth: 'deep' }).tokens.filter((t) => t.norm === 'great');
+  const [first, second] = analyze(text).tokens.filter((t) => t.norm === 'great');
   assert.ok(first.valence < 0);
   assert.ok(second.valence > 0);
 });
@@ -88,28 +83,30 @@ test('two negators cancel', () => {
   assert.ok(v('It is not that it was not working.', 'working') > 0);
 });
 
-test('plain sentences score the same in both tiers', () => {
-  for (const text of [
-    'The migration ran clean on staging. In production it deleted the index, and the rollback failed too.',
-    'Absolutely the worst onboarding I have ever suffered through. Support was lovely about it.',
-    'It is not broken.',
+test('plain sentences keep their first-pass sign', () => {
+  for (const [text, word, sign] of [
+    ['The migration ran clean on staging. In production it deleted the index, and the rollback failed too.', 'failed', -1],
+    ['Absolutely the worst onboarding I have ever suffered through. Support was lovely about it.', 'lovely', 1],
+    ['It is not broken.', 'broken', 1],
   ]) {
-    const fast = analyze(text, { depth: 'fast' }).tokens.map((t) => t.valence.toFixed(2));
-    const deep = analyze(text, { depth: 'deep' }).tokens.map((t) => t.valence.toFixed(2));
-    assert.deepEqual(deep, fast, text);
+    const t = analyze(text).tokens.find((tok) => tok.norm === word);
+    assert.equal(Math.sign(t.valence), sign, text);
   }
 });
 
-test('the deep tier says why', () => {
-  const t = analyze('We fixed the crash.', { depth: 'deep' }).tokens.find((tok) => tok.norm === 'crash');
+test('the clause pass says why', () => {
+  const t = analyze('We fixed the crash.').tokens.find((tok) => tok.norm === 'crash');
   assert.deepEqual(t.notes, ['resolved by "fixed"']);
 });
 
-test('the deep tier is not the expensive kind of deep', () => {
-  const page = 'The migration ran clean on staging. In production it deleted the index, and the rollback failed too. '.repeat(30);
-  for (let i = 0; i < 5; i++) analyze(page, { depth: 'deep' });
+test('stays inside the budget: a millisecond per hundred words, with room for a slow runner', () => {
+  const page = 'The migration ran clean on staging. In production it deleted the index, and the rollback failed too. '.repeat(60);
+  const words = page.split(/\s+/).filter(Boolean).length;
+  for (let i = 0; i < 10; i++) analyze(page);
   const started = performance.now();
-  for (let i = 0; i < 20; i++) analyze(page, { depth: 'deep' });
-  const ms = (performance.now() - started) / 20;
-  assert.ok(ms < 30, `${ms.toFixed(1)} ms for ${page.length} characters`);
+  for (let i = 0; i < 20; i++) analyze(page);
+  const perHundred = ((performance.now() - started) / 20) / words * 100;
+  // The budget is 1 ms per hundred words on a laptop. CI runners are slower
+  // and noisier, so the test only catches a regression of several times.
+  assert.ok(perHundred < 5, `${perHundred.toFixed(2)} ms per hundred words`);
 });
