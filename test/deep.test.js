@@ -110,3 +110,21 @@ test('stays inside the budget: a millisecond per hundred words, with room for a 
   // and noisier, so the test only catches a regression of several times.
   assert.ok(perHundred < 5, `${perHundred.toFixed(2)} ms per hundred words`);
 });
+
+// Coverage: the hand lexicon is the vocabulary of software and incidents, and
+// VADER underneath it is everything else. A sentence about a machine exploding
+// used to score zero on every word.
+test('everyday catastrophe vocabulary is negative', () => {
+  const text = 'the code i wrote made the machine explode im going to lose everything and die in a fiery wreck';
+  const { tokens } = analyze(text);
+  for (const word of ['explode', 'lose', 'die', 'fiery', 'wreck']) {
+    assert.ok(tokens.find((t) => t.norm === word).valence < -0.2, word);
+  }
+});
+
+test('neutral prose and hedges pick nothing up from the wider vocabulary', () => {
+  const { tokens } = analyze('Please bring the notes from last week and share the draft. Honestly the plan is fine.');
+  for (const word of ['please', 'share', 'honestly']) {
+    assert.equal(tokens.find((t) => t.norm === word).valence, 0, word);
+  }
+});
