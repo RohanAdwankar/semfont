@@ -208,6 +208,17 @@ npm run bench                 # ms per hundred words on this README
 npm run bench -- essay.md     # or on your own text
 ```
 
+## Vocabulary
+
+Valence comes from two layers. The hand-written table in `src/lexicon.js` is
+the vocabulary of software and incidents, a few hundred words with the scores
+the demos were tuned on. Under it sits about four thousand everyday words from
+the [VADER](https://github.com/cjhutto/vaderSentiment) sentiment lexicon
+(Hutto and Gilbert, 2014, MIT), filtered to the words its raters felt at least
+moderately about, minus anything that belongs to another channel and a short
+list of words VADER rates by their happiest sense. The hand table wins wherever
+they overlap. `node scripts/vader.mjs` regenerates `src/vader.js`.
+
 ## Two passes
 
 The first pass gives each word its lexicon entry and a fixed window of two or

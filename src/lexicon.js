@@ -3,10 +3,20 @@
 // consequence of one. Weights are on the same -1..1 / 0..1 scales the
 // channels use, so a custom lexicon can be merged in without rescaling.
 
-/** valence: how the word feels. -1 hostile, +1 warm. */
-export const VALENCE = {
+import { VADER } from './vader.js';
+
+/**
+ * valence: how the word feels. -1 hostile, +1 warm.
+ *
+ * Two layers. VADER (see vader.js) gives about four thousand everyday words a
+ * score; the table below is the hand-written layer for the vocabulary of
+ * software and incidents, and it wins wherever the two overlap.
+ */
+const HAND = {
   // negative
   awful: -0.9, terrible: -0.9, horrible: -0.9, disaster: -0.9, catastrophe: -0.95,
+  explode: -0.6, exploded: -0.6, explosion: -0.55, fiery: -0.4, burn: -0.4, burned: -0.4,
+  burning: -0.4, meltdown: -0.7, dying: -0.65,
   hate: -0.85, hated: -0.85, broken: -0.7, broke: -0.6, fails: -0.7, failed: -0.7,
   failure: -0.75, failing: -0.7, bug: -0.45, bugs: -0.45, crash: -0.7, crashed: -0.7,
   crashes: -0.65, error: -0.5, errors: -0.5, wrong: -0.6, bad: -0.6, worse: -0.7,
@@ -35,6 +45,8 @@ export const VALENCE = {
   recovered: 0.5, resolved: 0.6, avoided: 0.35, prevented: 0.35, survived: 0.5,
   mitigated: 0.4, gone: 0.1,
 };
+
+export const VALENCE = { ...VADER, ...HAND };
 
 /** salience: how much the word is asking to be looked at. 0..1 */
 export const SALIENCE = {
