@@ -1,56 +1,41 @@
-(* Markdown, as a font. Nothing here is code: the shaper does the parsing. *)
+(* Markdown, as a font. Nothing here is code: the shaper does the parsing.
+
+   Emphasis is written as toggles rather than as brackets, because that is
+   what it is. A closing ** does not have to be matched with the ** that
+   opened it; it turns bold off because bold was on. Five flags is thirty-two
+   states, and the font carries the current one in the glyph stream, so
+   nesting works at any depth with nothing unrolled. *)
 
 alphabet = " !\"'()[],-./0-9:;?A-Za-z*_~`#";
 
-(* The syntax, held out of every character class. Everything else is text. *)
-markers  = "*_~`#";
+(* Every combination of the face attributes below needs a file. *)
+face                  = "LiberationSans-Regular.ttf";
+face bold             = "LiberationSans-Bold.ttf";
+face italic           = "LiberationSans-Italic.ttf";
+face bold italic      = "LiberationSans-BoldItalic.ttf";
+face mono             = "LiberationMono-Regular.ttf";
+face mono bold        = "LiberationMono-Bold.ttf";
+face mono italic      = "LiberationMono-Italic.ttf";
+face mono bold italic = "LiberationMono-BoldItalic.ttf";
 
-style bold      = from "LiberationSans-Bold.ttf";
-style italic    = from "LiberationSans-Italic.ttf";
-style bolditalic = from "LiberationSans-BoldItalic.ttf";
-style code      = from "LiberationMono-Regular.ttf", color "#c0392b";
-style under     = rule -0.11;
-style strike    = rule 0.24;
-style boldunder = from "LiberationSans-Bold.ttf", rule -0.11;
-style boldcode  = from "LiberationMono-Bold.ttf", color "#c0392b";
-style h1        = from "LiberationSans-Bold.ttf", scale 1.5;
-style h2        = from "LiberationSans-Bold.ttf", scale 1.28;
-style h3        = from "LiberationSans-Bold.ttf", scale 1.12;
+toggle bold   = "**" -> bold;
+toggle italic = "*"  -> italic;
+toggle strike = "~~" -> rule 0.24;
+toggle code   = "`"  -> mono, color "#c0392b";
 
-text = { any };
+(* CommonMark: an underscore between word characters is literal, which is
+   what leaves get_user_name alone. *)
+toggle under  = "_"  -> rule -0.11 unless preceded_by word;
 
-(* A heading only counts at the start of a line. *)
-heading1 = line_start , "# "  , text -> h1 unless starts_with space;
-heading2 = line_start , "## " , text -> h2 unless starts_with space;
-heading3 = line_start , "### ", text -> h3 unless starts_with space;
+(* Headings are not toggles: they run from a line start to the end of the
+   line and never turn off, so they stay span rules. A heading line is not
+   also emphasised. *)
+markers = "*_~`#";
 
-(* One level of nesting, unrolled. A font has no stack, so the depth has to be
-   fixed here at compile time rather than discovered while reading. Nesting
-   also runs one way only: bold can hold italic because bold's rules run
-   first, and the reverse would need the same two lookups in the other
-   order. *)
-combine bold   , italic = bolditalic;
-combine bold   , under  = boldunder;
-combine bold   , code   = boldcode;
+style h1 = from "LiberationSans-Bold.ttf", scale 1.5;
+style h2 = from "LiberationSans-Bold.ttf", scale 1.28;
+style h3 = from "LiberationSans-Bold.ttf", scale 1.12;
 
-(* Longer runs of asterisks are emitted first, so they win the position. A
-   shorter one still has to be told not to fire inside a longer one. *)
-strong_em = "***" , text , "***" -> bolditalic unless starts_with space;
-strong    = "**"  , text , "**"  -> bold
-            unless starts_with space
-            unless starts_with "*"
-            unless preceded_by "*";
-emphasis  = "*"   , text , "*"   -> italic
-            unless starts_with space
-            unless starts_with "*"
-            unless preceded_by "*";
-
-struck = "~~" , text , "~~" -> strike unless starts_with space;
-
-(* CommonMark: an underscore between word characters is literal, which is what
-   leaves get_user_name alone. *)
-underline = "_" , text , "_" -> under
-            unless starts_with space
-            unless preceded_by word;
-
-code_span = "`" , text , "`" -> code unless starts_with space;
+heading1 = line_start , "# "  , { any } -> h1 unless starts_with space;
+heading2 = line_start , "## " , { any } -> h2 unless starts_with space;
+heading3 = line_start , "### ", { any } -> h3 unless starts_with space;

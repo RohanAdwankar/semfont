@@ -4,16 +4,18 @@ Write a grammar. Get a font that renders it.
 
 ```
 $ gramfont examples/markdown.gram --base LiberationSans-Regular.ttf -o markfont.ttf
-markfont.ttf 82 KB, markfont.woff2 34 KB
+markfont.ttf 241 KB, markfont.woff2 60 KB
 ```
 
 Set that font on a plain `<div>` of Markdown source and the Markdown renders.
 No script, no stylesheet, no parser. The shaper does it, because the rules are
 `GSUB` substitutions inside the font file.
 
+![Markdown, rendered by a font](docs/markdown.png)
+
 ![a diff, rendered by a font](docs/diff.png)
 
-That picture is eight lines of grammar:
+The second picture is eight lines of grammar:
 
 ```
 alphabet = " ...A-Za-z+-@";
@@ -28,45 +30,72 @@ removed = line_start , "-" , { any } -> removed keep;
 header  = line_start , "@@" , { any } -> hunk keep;
 ```
 
-## What a font can and cannot parse
+## Toggles, which is most of what markup is
+
+A closing `**` does not have to be matched with the `**` that opened it. It
+turns bold off because bold was on. That makes emphasis a set of independent
+flags rather than a bracket, and tracking k flags is a state machine with
+`2**k` states and no memory of how it got there.
+
+```
+toggle bold   = "**" -> bold;
+toggle italic = "*"  -> italic;
+toggle code   = "`"  -> mono, color "#c0392b";
+toggle under  = "_"  -> rule -0.11 unless preceded_by word;
+```
+
+Each toggle names attributes, and a `face` line supplies the file for each
+combination of the face attributes:
+
+```
+face                  = "LiberationSans-Regular.ttf";
+face bold             = "LiberationSans-Bold.ttf";
+face italic           = "LiberationSans-Italic.ttf";
+face bold italic      = "LiberationSans-BoldItalic.ttf";
+face mono             = "LiberationMono-Regular.ttf";
+...
+```
+
+The state lives in the glyph stream. Every glyph carries the state it is in
+as part of its name, a delimiter is replaced by a zero-width glyph carrying
+the state after the flip, and one lookup walking left to right reads its own
+output as backtrack. Depth is not tracked because depth does not matter:
+`*a **b ~~c `d` e~~ f** g*` comes out right, and so would twenty more levels.
+
+Five toggles is 32 states, 60 KB of woff2 with the headings included. Six is
+the cap, because every state holds a copy of the whole alphabet.
+
+An opener needs a non-space after it and a closer needs a non-space before
+it, which is what leaves `2 * 3 * 4` alone. `unless preceded_by word` is what
+leaves `get_user_name` alone.
+
+## What a font cannot parse
 
 A `GSUB` feature is a fixed list of lookups. Each lookup is a finite-state
-transducer over the glyph buffer, and composing finite-state transducers gives
-you another finite-state transducer. So a font recognises exactly the regular
-languages.
+transducer over the glyph buffer, and composing finite-state transducers
+gives you another finite-state transducer. So one shaping pass of a fixed
+font is a regular transduction, whatever the buffer does in the middle.
 
-EBNF describes context-free languages. The two are not the same set, and the
-gap is the interesting part: anything needing a stack is outside it. Arbitrary
-nesting, balanced delimiters, matched parentheses. `gramfont` takes EBNF syntax
-and refuses the productions that leave the regular subset, naming the cycle:
+That is a lower bar than it sounds, because most markup is regular. Toggles
+are. What is not regular is anything that has to match a specific opener with
+a specific closer: balanced parentheses, a nesting depth that changes the
+output, a construct whose meaning depends on how deep it is. For those you
+either unroll to a fixed depth or you do not do it in a font.
+
+`gramfont` takes EBNF syntax for the span rules and refuses the productions
+that leave the regular subset, naming the cycle:
 
 ```
 $ gramfont nested.gram --check --base Regular.ttf
 nested.gram: nested is defined in terms of itself (nested -> nested). A font
 runs a fixed list of substitutions, so it can match regular patterns and
-nothing deeper; recursion needs a stack it does not have. Unroll it to a fixed
-depth, or drop the nesting.
+nothing deeper; recursion needs a stack it does not have. Unroll it to a
+fixed depth, or drop the nesting.
 ```
 
-Bounded nesting is fine, because it unrolls, and `combine` is how you ask for
-a level of it:
-
-```
-combine bold , italic = bolditalic;
-```
-
-That says italic inside bold renders as `bolditalic`, and the compiler emits a
-second copy of the italic rules that reads bold-styled glyphs and writes
-bolditalic ones. `**bold with *italic* inside**` then comes out right, markers
-and all. Each `combine` is one more level, written out at compile time. What
-you cannot write is "to any depth", and that is the boundary rather than a
-missing feature.
-
-Nesting runs one way. A rule's lookup fires either before the rule it nests
-inside or after it, and a font cannot pick per occurrence, so `combine a , b`
-and `combine b , a` together are refused: one of the two orders would render
-wrong every time. In the Markdown example bold holds italic, and the reverse,
-`*italic with **bold** inside*`, is the case it does not handle.
+`combine a , b = c;` is the unrolled version for span rules, one level per
+declaration. It exists for markup that really is bracketed. For markup that
+toggles, use toggles and the depth stops being a question.
 
 ## The language
 
@@ -78,6 +107,8 @@ wrong every time. In the Markdown example bold holds italic, and the reverse,
 | `NAME = expr;` | a named production, for reuse |
 | `NAME = expr -> STYLE;` | a rule: match this, draw it that way |
 | `combine A , B = C;` | B nested inside A renders as C |
+| `face <attrs> = "f.ttf";` | the file for one combination of face attributes |
+| `toggle NAME = "**" -> attrs;` | a delimiter that flips a flag on and off |
 
 Expressions are EBNF: `"literal"`, `name`, `a , b`, `a | b`, `[ optional ]`,
 `{ repeated }`, `( grouped )`. The builtin classes are `any`, `letter`,

@@ -19,6 +19,7 @@ from fontTools import subset
 
 from .grammar import GrammarError
 from .plan import CONTENT, MARKER, RUN
+from .toggles import Machine
 
 NULL = 'gramnull'
 BAR_THICKNESS = 0.045
@@ -67,6 +68,7 @@ class Builder:
         self.glyf, self.hmtx = self.font['glyf'], self.font['hmtx']
         self.base_order = self.font.getGlyphOrder()[:]
         self.added, self.colr, self.palette = [], {}, []
+        self.machine = Machine(self) if grammar.toggles else None
 
     def _subset(self):
         logging.getLogger('fontTools.subset').setLevel(logging.ERROR)
@@ -92,7 +94,85 @@ class Builder:
         self.glyf[NULL] = pen.glyph()
         self.hmtx[NULL] = (0, 0)
         self.added.append(NULL)
+        if self.machine:
+            self.machine.build()
         self._finish_glyph_order()
+
+    # --------------------------------------------------- glyphs for the states
+
+    def load_face(self, path):
+        if not os.path.isabs(path) and not os.path.exists(path):
+            path = os.path.join(self.font_dir, path)
+        if not os.path.exists(path):
+            raise GrammarError(f'no font file at {path}')
+        other = TTFont(path)
+        return (other.getGlyphSet(), other.getBestCmap(), other['hmtx'],
+                other['head'].unitsPerEm)
+
+    def copy_face(self, face, tag):
+        """One real outline per character, scaled to this font's em."""
+        source, cmap, hmtx, upem = face
+        scale = self.upem / upem
+        for char in self.alphabet:
+            name = cmap.get(ord(char))
+            if name is None:
+                raise GrammarError(f'a face has no glyph for {char!r}')
+            target = f'{self.name[char]}.{tag}'
+            self.glyf[target] = redraw(
+                source, name, Transform().scale(scale) if scale != 1 else None)
+            self.hmtx[target] = (round(hmtx[name][0] * scale), 0)
+            self.added.append(target)
+        return tag
+
+    def make_bar_unit(self):
+        """One em-wide bar, reused as a scaled component by every ruled state.
+
+        Drawing the bar into each glyph would mean a fresh outline per state.
+        As a component it is a reference, so underline and strikethrough cost
+        almost nothing across all the combinations they appear in.
+        """
+        pen = TTGlyphPen(None)
+        height = round(self.upem * BAR_THICKNESS)
+        pen.moveTo((0, 0))
+        pen.lineTo((self.upem, 0))
+        pen.lineTo((self.upem, height))
+        pen.lineTo((0, height))
+        pen.closePath()
+        self.glyf['barunit'] = pen.glyph()
+        self.hmtx['barunit'] = (self.upem, 0)
+        self.added.append('barunit')
+        return 'barunit'
+
+    def make_state_glyphs(self, tag, face_tag, bars, colour, bar_glyph):
+        index = None
+        if colour:
+            index = len(self.palette)
+            self.palette.append(hexcolor(colour))
+        for char in self.alphabet:
+            source = f'{self.name[char]}.{face_tag}'
+            advance = self.hmtx[source][0]
+            pen = TTGlyphPen(self.glyf.glyphs)
+            pen.addComponent(source, (1, 0, 0, 1, 0, 0))
+            for offset in bars:
+                pen.addComponent(bar_glyph, (advance / self.upem, 0, 0, 1, 0,
+                                             round(offset * self.upem)))
+            drawn = pen.glyph()
+            target = f'{self.name[char]}.{tag}'
+            if colour:
+                layer = f'{target}.l'
+                self.glyf[layer] = drawn
+                self.hmtx[layer] = (advance, 0)
+                self.added.append(layer)
+                self.glyf[target] = TTGlyphPen(None).glyph()
+                self.colr[target] = [(layer, index)]
+            else:
+                self.glyf[target] = drawn
+            self.hmtx[target] = (advance, 0)
+            self.added.append(target)
+        empty = f'null.{tag}'
+        self.glyf[empty] = TTGlyphPen(None).glyph()
+        self.hmtx[empty] = (0, 0)
+        self.added.append(empty)
 
     def _build_style(self, style, props):
         source, cmap, hmtx, upem = self._source(props)
@@ -217,6 +297,8 @@ class Builder:
         lines += [f'  lookup {name};' for name in names]
         lines.append('} calt;')
         lines += self._hide(ordered)
+        if self.machine:
+            lines += self.machine.lines()
         return '\n'.join(lines) + '\n'
 
     def _rules(self, shape, host=None, style=None, writer=None):

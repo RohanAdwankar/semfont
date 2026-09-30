@@ -10,6 +10,8 @@ from .grammar import (Alt, Cat, GrammarError, Lit, Opt, Ref, Rep, ANCHORS,
                       BUILTIN, marker_chars)
 
 MARKER, CONTENT, RUN, ANCHOR = 'marker', 'content', 'run', 'anchor'
+# Beyond this the glyph count runs away: every state holds the whole alphabet.
+MAX_TOGGLES = 6
 
 
 class Atom:
@@ -181,6 +183,10 @@ def plan(grammar):
     """Every rule, as the list of shapes the compiler will emit."""
     grammar.markers = marker_chars(grammar)
     cls = classes(grammar.alphabet, grammar.markers)
+    if grammar.toggles and not grammar.rules:
+        # A toggle grammar has no spans, so nothing needs markers held out of
+        # the classes; `word` has to mean word for the underscore guard.
+        cls = classes(grammar.alphabet)
     for rule in grammar.rules:
         if rule.style not in grammar.styles:
             raise GrammarError(f'{rule.name}: no style called {rule.style!r}',
@@ -192,6 +198,14 @@ def plan(grammar):
             if name not in grammar.styles:
                 raise GrammarError(f'combine names {name!r}, which is not a style')
     check_nesting_is_one_way(grammar)
+    if len(grammar.toggles) > MAX_TOGGLES:
+        raise GrammarError(
+            f'{len(grammar.toggles)} toggles is {2 ** len(grammar.toggles)} '
+            f'states, and every state needs a copy of every glyph. Keep it to '
+            f'{MAX_TOGGLES}.')
+    for toggle in grammar.toggles:
+        toggle.guards = [(kind, resolve_class(expr, grammar, cls, toggle))
+                         for kind, expr in toggle.guards]
     shapes = []
     for rule in grammar.rules:
         for alt in flatten(rule.expr, grammar, cls):

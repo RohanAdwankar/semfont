@@ -117,6 +117,19 @@ def lex(source):
 
 # -------------------------------------------------------------------- parsing
 
+class Toggle:
+    """A delimiter that flips a flag rather than opening a bracket.
+
+    `**` does not have to be matched with the `**` that opened it. It turns
+    bold on if bold is off and off if bold is on, which is a state machine
+    with one bit per flag and no memory of how it got there.
+    """
+
+    def __init__(self, name, delimiter, attrs, guards, line):
+        self.name, self.delimiter, self.attrs = name, delimiter, attrs
+        self.guards, self.line = guards, line
+
+
 class Rule:
     def __init__(self, name, expr, style, guards, line, keep=False):
         self.name, self.expr, self.style = name, expr, style
@@ -129,6 +142,8 @@ class Grammar:
         self.markers = None     # set by a `markers` declaration, else derived
         self.styles = {}        # name -> {prop: value}
         self.combines = []      # (outer, inner, result) -- one level of nesting
+        self.faces = {}         # frozenset(attribute) -> font path
+        self.toggles = []       # [Toggle] -- a flag the text flips on and off
         self.productions = {}   # name -> Expr   (no action)
         self.rules = []         # [Rule]         (has an action)
 
@@ -168,6 +183,17 @@ class Parser:
                 self.expect('punct', '=')
                 g.markers = set(expand_ranges(self.expect('string')))
                 self.expect('punct', ';')
+            elif value == 'face':
+                self.next()
+                attrs = []
+                while self.peek()[0] == 'name':
+                    attrs.append(self.next()[1])
+                self.expect('punct', '=')
+                g.faces[frozenset(attrs)] = self.expect('string')
+                self.expect('punct', ';')
+            elif value == 'toggle':
+                self.next()
+                g.toggles.append(self.parse_toggle(line))
             elif value == 'combine':
                 self.next()
                 outer = self.expect('name')
@@ -187,6 +213,33 @@ class Parser:
         if not g.alphabet:
             raise GrammarError('no alphabet declared')
         return g
+
+    def parse_toggle(self, line):
+        name = self.expect('name')
+        self.expect('punct', '=')
+        delimiter = self.expect('string')
+        attrs = {'face': set(), 'color': None, 'rule': []}
+        if self.peek()[0] == 'arrow':
+            self.next()
+            while True:
+                kind, value, at = self.next()
+                if kind != 'name':
+                    raise GrammarError(f'expected an attribute, found {value!r}', at)
+                if value == 'color':
+                    attrs['color'] = self.expect('string')
+                elif value == 'rule':
+                    attrs['rule'].append(float(self.expect('number')))
+                else:
+                    attrs['face'].add(value)
+                if self.peek()[1] != ',':
+                    break
+                self.next()
+        guards = []
+        while self.peek()[1] == 'unless':
+            self.next()
+            guards.append(self.parse_guard())
+        self.expect('punct', ';')
+        return Toggle(name, delimiter, attrs, guards, line)
 
     def parse_style_props(self, line):
         props = {}

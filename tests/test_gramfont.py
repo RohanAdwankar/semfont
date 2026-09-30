@@ -86,6 +86,39 @@ class GrammarTest(unittest.TestCase):
         self.assertEqual(shapes[0].rule.guards, [('starts_with', {' '})])
 
 
+TOGGLE_HEAD = 'alphabet = "a-z *_";\nface = "%s";\nface bold = "%s";\n' % (
+    LIBERATION / 'LiberationSans-Regular.ttf', LIBERATION / 'LiberationSans-Bold.ttf')
+
+
+class ToggleTest(unittest.TestCase):
+    def test_too_many_toggles_is_refused_with_the_state_count(self):
+        """Every state needs a copy of every glyph, so the states are the
+        budget, not the toggles."""
+        body = ''.join(f'toggle t{i} = "{c}" -> bold;\n'
+                       for i, c in enumerate('abcdefg'))
+        with self.assertRaises(GrammarError) as caught:
+            plan(check_regular(parse(TOGGLE_HEAD.replace('a-z', 'a-z') + body)))
+        self.assertIn('128 states', str(caught.exception))
+
+    def test_a_missing_face_names_the_combination_that_needed_it(self):
+        source = (TOGGLE_HEAD + 'toggle bold = "*" -> bold;\n'
+                  'toggle em = "_" -> italic;')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        with self.assertRaises(GrammarError) as caught:
+            Builder(grammar, shapes, str(BASE)).build_glyphs()
+        self.assertIn('no face declared for', str(caught.exception))
+        self.assertIn('italic', str(caught.exception))
+
+    def test_a_toggle_guard_is_resolved_to_characters(self):
+        grammar = check_regular(parse(
+            TOGGLE_HEAD + 'toggle bold = "*" -> bold unless preceded_by word;'))
+        plan(grammar)
+        self.assertEqual(grammar.toggles[0].guards[0][0], 'preceded_by')
+        self.assertIn('a', grammar.toggles[0].guards[0][1])
+        self.assertNotIn(' ', grammar.toggles[0].guards[0][1])
+
+
 @unittest.skipUnless(BASE.exists(), 'Liberation fonts are not installed')
 class FontTest(unittest.TestCase):
     def compile(self, source):
@@ -99,24 +132,28 @@ class FontTest(unittest.TestCase):
         source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
         grammar = check_regular(parse(source))
         shapes, _ = plan(grammar)
-        self.assertEqual(len(shapes), 9)
+        self.assertEqual(len(shapes), 3)   # the three headings; the rest are toggles
         builder = Builder(grammar, shapes, str(BASE))
         builder.build_glyphs()
         self.assertIn('feature calt', builder.feature())
 
-    def test_an_outer_style_runs_before_the_one_it_holds(self):
+    def test_the_markdown_example_is_a_state_machine_over_its_toggles(self):
+        """Five toggles is thirty-two states, and every glyph carries the one
+        it is in, which is what makes the depth unlimited."""
         source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
         grammar = check_regular(parse(source))
         shapes, _ = plan(grammar)
         builder = Builder(grammar, shapes, str(BASE))
         builder.build_glyphs()
         fea = builder.feature()
-        order = [line for line in fea.splitlines() if line.startswith('lookup R')]
-        styles = [shapes[int(line[8:line.index(' ', 8)])].rule.style
-                  for line in order]
-        self.assertLess(styles.index('bold'), styles.index('italic'))
-        self.assertIn('lookup TO_bolditalic_in_bold', fea)
-        self.assertIn('lookup Nbold_', fea)
+        self.assertEqual(len(grammar.toggles), 5)
+        self.assertIn('@S31 =', fea)
+        self.assertNotIn('@S32 =', fea)
+        self.assertIn('lookup PRIME', fea)
+        self.assertIn('lookup TOGGLE', fea)
+        names = set(builder.font.getGlyphOrder())
+        self.assertIn('null.s31', names)
+        self.assertIn('a.s31', names)
 
     def test_a_nested_span_reads_the_outer_style_and_writes_the_combined_one(self):
         extra = 'style em = from "%s";\nstyle both = from "%s";\n' % (
