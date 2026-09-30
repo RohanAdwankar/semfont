@@ -179,10 +179,14 @@ class Builder:
             lines.append(f'@All_{style} = {self.styled(style, set(self.alphabet))};')
             lines.append(f'lookup TO_{style} {{ sub @All by @All_{style}; }} TO_{style};')
 
-        # A longer opener has to be tried before a shorter one that prefixes it,
-        # or `**` never fires because `*` already consumed the position.
+        # Two things fix the order. A style something nests inside has to run
+        # first, or the inner rule consumes the text before the outer one sees
+        # it. Otherwise a longer opener goes before a shorter one that prefixes
+        # it, or `**` never fires because `*` already took the position.
+        depth = self._nesting_depth()
         ordered = sorted(enumerate(self.shapes),
-                         key=lambda pair: (-len(pair[1].prefix), pair[0]))
+                         key=lambda pair: (depth.get(pair[1].rule.style, 0),
+                                           -len(pair[1].prefix), pair[0]))
         names = []
         for index, shape in ordered:
             name = f'R{index}'
@@ -190,45 +194,123 @@ class Builder:
             lines.append(f'lookup {name} {{')
             lines += ['  ' + rule for rule in self._rules(shape)]
             lines.append(f'}} {name};')
+        # Writing a combined style means reading a glyph that is already
+        # styled, so each combination needs its own substitution lookup.
+        for outer, _, result in self.grammar.combines:
+            lines.append(f'lookup TO_{result}_in_{outer} '
+                         f'{{ sub @All_{outer} by @All_{result}; }} TO_{result}_in_{outer};')
+        # One level of nesting, unrolled. The outer span has already styled
+        # everything between its markers, the inner marker included, so this
+        # pass only upgrades a sub-range of it to the combined style.
+        for outer, inner, result in self.grammar.combines:
+            for index, shape in ordered:
+                if shape.rule.style != inner or not shape.spans:
+                    continue
+                name = f'N{outer}_{index}_{result}'
+                names.append(name)
+                lines.append(f'lookup {name} {{')
+                lines += ['  ' + rule for rule
+                          in self._rules(shape, host=outer, style=result,
+                                         writer=f'TO_{result}_in_{outer}')]
+                lines.append(f'}} {name};')
         lines.append('feature calt {')
         lines += [f'  lookup {name};' for name in names]
         lines.append('} calt;')
         lines += self._hide(ordered)
         return '\n'.join(lines) + '\n'
 
-    def _rules(self, shape):
-        style = shape.rule.style
-        prefix = [self.name[next(iter(a.chars))] for a in shape.prefix]
+    def _rules(self, shape, host=None, style=None, writer=None):
+        """The substitutions for one alternative.
+
+        With `host` set, the same pattern is emitted again over glyphs the
+        outer span has already styled, writing the combined style instead.
+        """
+        style = style or shape.rule.style
+        writer = writer or f'TO_{style}'
+        suffix_of = (lambda g: f'{g}.{host}') if host else (lambda g: g)
+        chars_cls = ((lambda cs: self.styled(host, cs)) if host else self.cls)
+        prefix = [suffix_of(self.name[next(iter(a.chars))]) for a in shape.prefix]
         seed_chars = set(shape.body[0].chars)
         backtracks = []
         for kind, chars in shape.rule.guards:
             if kind == 'preceded_by':
-                backtracks.append(self.cls(chars))
+                backtracks.append(chars_cls(chars))
             else:
                 seed_chars -= chars
         if not seed_chars:
             raise GrammarError(
                 f'{shape.rule.name}: the guards rule out every character the '
                 f'pattern could start with', shape.rule.line)
-        if shape.line_start:
+        if shape.line_start and not host:
             # OpenType has no line anchor. A shaping run stops at a newline, so
             # "there is nothing to backtrack over" is the same test.
             backtracks.append('@All')
+        # A style that carries across markers has to recognise its own styled
+        # markers as backtrack too, or the run stops at the first one.
+        carries = bool(host) or self._hosts_a_nest(shape.rule.style)
+        behind = f'@All_{style}' if carries else f'@Any_{style}'
         # The closing marker looks exactly like the opening one. Without this
         # the rule re-seeds on it and the span never ends.
-        backtracks.append(f'@Any_{style}')
+        backtracks.append(behind)
 
-        seed = self.cls(seed_chars)
+        seed = chars_cls(seed_chars)
         rules = [join('ignore sub', back, *prefix, seed + Q) + ';'
                  for back in backtracks]
         if shape.spans:
-            rules.append(join('sub', *prefix, seed + Q, f'lookup TO_{style}') + ';')
-            rules.append(f'sub @Any_{style} @Any{Q} lookup TO_{style};')
+            if carries and shape.suffix:
+                # Carrying the style across a marker means the closing one has
+                # to be excluded by name, or the span runs to the end of the
+                # line instead of stopping there.
+                closer = [suffix_of(self.name[next(iter(a.chars))])
+                          for a in shape.suffix]
+                # A closing marker can also be the start of a longer opening
+                # one: `*` ends emphasis and begins `**`. Carry the style over
+                # the longer form first, so the nested rule still sees it.
+                for longer in self._longer_openers(shape):
+                    glyphs = [f'{suffix_of(self.name[c])}{Q} lookup {writer}'
+                              for c in longer]
+                    rules.append(join('sub', behind, *glyphs) + ';')
+                rules.append(join('ignore sub', behind,
+                                  closer[0] + Q, *closer[1:]) + ';')
+            rules.append(join('sub', *prefix, seed + Q, f'lookup {writer}') + ';')
+            over = f'@All_{host}' if host else ('@All' if carries else '@Any')
+            rules.append(f'sub {behind} {over}{Q} lookup {writer};')
         else:
-            marked = [f'{self.cls(a.chars)}{Q} lookup TO_{style}' for a in shape.body]
-            tail = [self.name[next(iter(a.chars))] for a in shape.suffix]
+            marked = [f'{chars_cls(a.chars)}{Q} lookup {writer}' for a in shape.body]
+            tail = [suffix_of(self.name[next(iter(a.chars))]) for a in shape.suffix]
             rules.append(join('sub', *prefix, *marked, *tail) + ';')
         return rules
+
+    def _nesting_depth(self):
+        """How deep a style sits: an outer style is 0, what nests in it is 1."""
+        inside = {}
+        for outer, inner, _ in self.grammar.combines:
+            inside.setdefault(inner, set()).add(outer)
+        depth = {}
+
+        def of(style):
+            if style not in depth:
+                depth[style] = 0    # guards against a cycle plan already refused
+                depth[style] = max((of(o) + 1 for o in inside.get(style, ())),
+                                   default=0)
+            return depth[style]
+
+        for style in self.grammar.styles:
+            of(style)
+        return depth
+
+    def _longer_openers(self, shape):
+        """Other rules' opening markers that begin with this one's closer."""
+        closer = tuple(next(iter(a.chars)) for a in shape.suffix)
+        found = []
+        for other in self.shapes:
+            opener = tuple(next(iter(a.chars)) for a in other.prefix)
+            if len(opener) > len(closer) and opener[:len(closer)] == closer:
+                found.append(opener)
+        return sorted(set(found), key=len, reverse=True)
+
+    def _hosts_a_nest(self, style):
+        return any(outer == style for outer, _, _ in self.grammar.combines)
 
     def _hide(self, ordered):
         """A marker is only a marker once it has actually styled something.
@@ -240,23 +322,38 @@ class Builder:
         markers = sorted({c for shape in self.shapes if not shape.rule.keep
                           for atom in shape.prefix + shape.suffix
                           for c in atom.chars})
-        hide = []
-        for _, shape in ordered:
-            if shape.rule.keep:
-                continue
-            style = shape.rule.style
+        hide, styled_markers = [], set()
+        combos = self.grammar.combines
+
+        def emit(shape, style, host):
+            dot = (lambda g: f'{g}.{host}') if host else (lambda g: g)
             for part, template in ((shape.prefix, '  sub {} @Any_{};'),
                                    (shape.suffix, '  sub @Any_{1} {0};')):
                 if not part:
                     continue
-                marked = ' '.join(
-                    f'{self.name[next(iter(a.chars))]}{Q} lookup TO_NULL'
-                    for a in part)
+                for atom in part:
+                    if host:
+                        styled_markers.add(dot(self.name[next(iter(atom.chars))]))
+                marked = ' '.join(f'{dot(self.name[next(iter(a.chars))])}{Q} lookup TO_NULL'
+                                  for a in part)
                 hide.append(template.format(marked, style))
+
+        for _, shape in ordered:
+            if shape.rule.keep:
+                continue
+            emit(shape, shape.rule.style, None)
+            # An outer span can end on a nested run, so its closing marker has
+            # to be hidden after the combined style too.
+            for outer, inner, result in combos:
+                if shape.rule.style == outer and shape.suffix:
+                    emit(shape, result, None)
+                if shape.rule.style == inner and shape.spans:
+                    emit(shape, result, outer)
         lines = []
         if hide:
             lines.append('lookup TO_NULL {')
             lines += [f'  sub {self.name[c]} by {NULL};' for c in markers]
+            lines += [f'  sub {g} by {NULL};' for g in sorted(styled_markers)]
             lines.append('} TO_NULL;')
             lines.append('lookup HIDE {')
             lines += hide

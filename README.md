@@ -48,8 +48,25 @@ nothing deeper; recursion needs a stack it does not have. Unroll it to a fixed
 depth, or drop the nesting.
 ```
 
-Bounded nesting is fine, because it unrolls. Write the two levels you want as
-two rules. Unbounded nesting is not a missing feature, it is the boundary.
+Bounded nesting is fine, because it unrolls, and `combine` is how you ask for
+a level of it:
+
+```
+combine bold , italic = bolditalic;
+```
+
+That says italic inside bold renders as `bolditalic`, and the compiler emits a
+second copy of the italic rules that reads bold-styled glyphs and writes
+bolditalic ones. `**bold with *italic* inside**` then comes out right, markers
+and all. Each `combine` is one more level, written out at compile time. What
+you cannot write is "to any depth", and that is the boundary rather than a
+missing feature.
+
+Nesting runs one way. A rule's lookup fires either before the rule it nests
+inside or after it, and a font cannot pick per occurrence, so `combine a , b`
+and `combine b , a` together are refused: one of the two orders would render
+wrong every time. In the Markdown example bold holds italic, and the reverse,
+`*italic with **bold** inside*`, is the case it does not handle.
 
 ## The language
 
@@ -60,6 +77,7 @@ two rules. Unbounded nesting is not a missing feature, it is the boundary.
 | `style NAME = ...;` | how a match is drawn |
 | `NAME = expr;` | a named production, for reuse |
 | `NAME = expr -> STYLE;` | a rule: match this, draw it that way |
+| `combine A , B = C;` | B nested inside A renders as C |
 
 Expressions are EBNF: `"literal"`, `name`, `a , b`, `a | b`, `[ optional ]`,
 `{ repeated }`, `( grouped )`. The builtin classes are `any`, `letter`,

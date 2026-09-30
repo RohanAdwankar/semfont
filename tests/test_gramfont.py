@@ -70,6 +70,17 @@ class GrammarTest(unittest.TestCase):
         self.assertNotIn('*', classes['any'])
         self.assertIn('a', classes['any'])
 
+    def test_nesting_both_ways_is_refused(self):
+        """Whichever lookup runs first would win every time, which renders
+        wrong rather than rendering nothing."""
+        extra = 'style em = from "%s";\nstyle both = from "%s";\n' % (
+            LIBERATION / 'LiberationSans-Italic.ttf',
+            LIBERATION / 'LiberationSans-BoldItalic.ttf')
+        with self.assertRaises(GrammarError) as caught:
+            build(extra + 'combine bold , em = both;\ncombine em , bold = both;\n'
+                  'r = "*" , { any } , "*" -> bold;')
+        self.assertIn('nests inside itself', str(caught.exception))
+
     def test_guards_narrow_the_seed_rather_than_the_whole_class(self):
         shapes, _ = build('r = "*" , { any } , "*" -> bold unless starts_with space;')
         self.assertEqual(shapes[0].rule.guards, [('starts_with', {' '})])
@@ -92,6 +103,38 @@ class FontTest(unittest.TestCase):
         builder = Builder(grammar, shapes, str(BASE))
         builder.build_glyphs()
         self.assertIn('feature calt', builder.feature())
+
+    def test_an_outer_style_runs_before_the_one_it_holds(self):
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        fea = builder.feature()
+        order = [line for line in fea.splitlines() if line.startswith('lookup R')]
+        styles = [shapes[int(line[8:line.index(' ', 8)])].rule.style
+                  for line in order]
+        self.assertLess(styles.index('bold'), styles.index('italic'))
+        self.assertIn('lookup TO_bolditalic_in_bold', fea)
+        self.assertIn('lookup Nbold_', fea)
+
+    def test_a_nested_span_reads_the_outer_style_and_writes_the_combined_one(self):
+        extra = 'style em = from "%s";\nstyle both = from "%s";\n' % (
+            LIBERATION / 'LiberationSans-Italic.ttf',
+            LIBERATION / 'LiberationSans-BoldItalic.ttf')
+        grammar = check_regular(parse(
+            HEAD + extra + 'combine bold , em = both;\n'
+            'b = "**" , { any } , "**" -> bold;\n'
+            'e = "*" , { any } , "*" -> em;'))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        fea = builder.feature()
+        self.assertIn('sub @All_bold by @All_both;', fea)
+        self.assertIn('asterisk.bold', fea)
+        # The outer span has to carry over the inner marker to reach the text
+        # after it, so it reads its own styled markers as backtrack.
+        self.assertIn("sub @All_bold @All' lookup TO_bold;", fea)
 
     def test_the_diff_example_compiles_and_keeps_its_markers(self):
         source = (ROOT / 'examples' / 'diff.gram').read_text(encoding='utf-8')

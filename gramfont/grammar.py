@@ -128,6 +128,7 @@ class Grammar:
         self.alphabet = ''
         self.markers = None     # set by a `markers` declaration, else derived
         self.styles = {}        # name -> {prop: value}
+        self.combines = []      # (outer, inner, result) -- one level of nesting
         self.productions = {}   # name -> Expr   (no action)
         self.rules = []         # [Rule]         (has an action)
 
@@ -166,6 +167,14 @@ class Parser:
                 self.next()
                 self.expect('punct', '=')
                 g.markers = set(expand_ranges(self.expect('string')))
+                self.expect('punct', ';')
+            elif value == 'combine':
+                self.next()
+                outer = self.expect('name')
+                self.expect('punct', ',')
+                inner = self.expect('name')
+                self.expect('punct', '=')
+                g.combines.append((outer, inner, self.expect('name')))
                 self.expect('punct', ';')
             elif value == 'style':
                 self.next()

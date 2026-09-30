@@ -11,6 +11,8 @@ style bolditalic = from "LiberationSans-BoldItalic.ttf";
 style code      = from "LiberationMono-Regular.ttf", color "#c0392b";
 style under     = rule -0.11;
 style strike    = rule 0.24;
+style boldunder = from "LiberationSans-Bold.ttf", rule -0.11;
+style boldcode  = from "LiberationMono-Bold.ttf", color "#c0392b";
 style h1        = from "LiberationSans-Bold.ttf", scale 1.5;
 style h2        = from "LiberationSans-Bold.ttf", scale 1.28;
 style h3        = from "LiberationSans-Bold.ttf", scale 1.12;
@@ -21,6 +23,15 @@ text = { any };
 heading1 = line_start , "# "  , text -> h1 unless starts_with space;
 heading2 = line_start , "## " , text -> h2 unless starts_with space;
 heading3 = line_start , "### ", text -> h3 unless starts_with space;
+
+(* One level of nesting, unrolled. A font has no stack, so the depth has to be
+   fixed here at compile time rather than discovered while reading. Nesting
+   also runs one way only: bold can hold italic because bold's rules run
+   first, and the reverse would need the same two lookups in the other
+   order. *)
+combine bold   , italic = bolditalic;
+combine bold   , under  = boldunder;
+combine bold   , code   = boldcode;
 
 (* Longer runs of asterisks are emitted first, so they win the position. A
    shorter one still has to be told not to fire inside a longer one. *)

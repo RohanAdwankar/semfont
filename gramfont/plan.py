@@ -136,6 +136,37 @@ def shape(rule, atoms):
     return Shape(rule, prefix, body, suffix, line_start)
 
 
+def check_nesting_is_one_way(grammar):
+    """Nesting has to run one way, because the lookups run in one order.
+
+    A rule's lookup either fires before the one it nests inside or after it,
+    and the font has no way to choose per occurrence. So `a` inside `b` and
+    `b` inside `a` cannot both hold: whichever lookup runs first wins every
+    time, which is a silently wrong render rather than a missing feature.
+    """
+    edges = {}
+    for outer, inner, _ in grammar.combines:
+        edges.setdefault(outer, set()).add(inner)
+    state = {}
+
+    def walk(style, path):
+        if state.get(style) == 'open':
+            cycle = ' inside '.join(reversed(path[path.index(style):] + [style]))
+            raise GrammarError(
+                f'{style} nests inside itself ({cycle}). Lookups run in one '
+                f'fixed order, so only one direction of a pair can work; drop '
+                f'the combine for the other one.')
+        if state.get(style) == 'done':
+            return
+        state[style] = 'open'
+        for nested in edges.get(style, ()):
+            walk(nested, path + [style])
+        state[style] = 'done'
+
+    for style in list(edges):
+        walk(style, [])
+
+
 def resolve_class(expr, grammar, cls, rule):
     """A guard has to name one character class, not a pattern."""
     alts = flatten(expr, grammar, cls)
@@ -156,6 +187,11 @@ def plan(grammar):
                                rule.line)
         rule.guards = [(kind, resolve_class(expr, grammar, cls, rule))
                        for kind, expr in rule.guards]
+    for outer, inner, result in grammar.combines:
+        for name in (outer, inner, result):
+            if name not in grammar.styles:
+                raise GrammarError(f'combine names {name!r}, which is not a style')
+    check_nesting_is_one_way(grammar)
     shapes = []
     for rule in grammar.rules:
         for alt in flatten(rule.expr, grammar, cls):
