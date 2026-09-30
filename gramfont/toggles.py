@@ -146,7 +146,12 @@ class Machine:
                 # also what stops `2 * 3` from closing anything.
                 if backtrack is None:
                     continue
-                behind = self.cls(state, set(b.alphabet) - space)
+                # A hidden delimiter is not a space. Leaving `null` out here
+                # is what stopped `**bold ~~struck~~**` from closing: the
+                # glyph behind the final `**` is the one the `~~` became.
+                behind = '[%s %s]' % (
+                    self.cls(state, set(b.alphabet) - space)[1:-1],
+                    f'null.{self.suffix(state)}')
                 out.append(f'sub {behind} {marked};')
                 continue
             # Opening. A space after it opens nothing, and neither does a
