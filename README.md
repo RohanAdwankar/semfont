@@ -305,7 +305,11 @@ What it does not do: weight, size, tracking, highlight and slant, which a
 static font cannot vary per word. Intensifiers (`very`, `totally`) are not
 modelled, so those words come out a step lighter than the library's. And in
 Chrome a soft line wrap resets the shaper, so a `not` and the word it negates
-on opposite sides of a wrap colour as if the `not` were absent.
+on opposite sides of a wrap colour as if the `not` were absent. Text typed into
+an editable box skips the font's rules in Chrome until something forces a
+reshape, and swapping `font-family` between two equivalent stacks in an `input`
+handler does, without moving the text or the caret. Pasted and script-set text
+is fine. Only Chrome was tested.
 
 The whole thing is 148 KB of woff2.
 
