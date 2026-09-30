@@ -1,0 +1,45 @@
+(* Markdown, as a font. Nothing here is code: the shaper does the parsing. *)
+
+alphabet = " !\"'()[],-./0-9:;?A-Za-z*_~`#";
+
+(* The syntax, held out of every character class. Everything else is text. *)
+markers  = "*_~`#";
+
+style bold      = from "LiberationSans-Bold.ttf";
+style italic    = from "LiberationSans-Italic.ttf";
+style bolditalic = from "LiberationSans-BoldItalic.ttf";
+style code      = from "LiberationMono-Regular.ttf", color "#c0392b";
+style under     = rule -0.11;
+style strike    = rule 0.24;
+style h1        = from "LiberationSans-Bold.ttf", scale 1.5;
+style h2        = from "LiberationSans-Bold.ttf", scale 1.28;
+style h3        = from "LiberationSans-Bold.ttf", scale 1.12;
+
+text = { any };
+
+(* A heading only counts at the start of a line. *)
+heading1 = line_start , "# "  , text -> h1 unless starts_with space;
+heading2 = line_start , "## " , text -> h2 unless starts_with space;
+heading3 = line_start , "### ", text -> h3 unless starts_with space;
+
+(* Longer runs of asterisks are emitted first, so they win the position. A
+   shorter one still has to be told not to fire inside a longer one. *)
+strong_em = "***" , text , "***" -> bolditalic unless starts_with space;
+strong    = "**"  , text , "**"  -> bold
+            unless starts_with space
+            unless starts_with "*"
+            unless preceded_by "*";
+emphasis  = "*"   , text , "*"   -> italic
+            unless starts_with space
+            unless starts_with "*"
+            unless preceded_by "*";
+
+struck = "~~" , text , "~~" -> strike unless starts_with space;
+
+(* CommonMark: an underscore between word characters is literal, which is what
+   leaves get_user_name alone. *)
+underline = "_" , text , "_" -> under
+            unless starts_with space
+            unless preceded_by word;
+
+code_span = "`" , text , "`" -> code unless starts_with space;

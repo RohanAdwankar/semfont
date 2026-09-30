@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.ttf
+*.woff2
+*.fea

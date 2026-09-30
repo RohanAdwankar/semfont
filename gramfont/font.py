@@ -1,0 +1,300 @@
+"""Turn a plan into a font file.
+
+Two halves. One builds a styled copy of every glyph in the alphabet, once per
+style the grammar declares. The other writes the `GSUB` rules that decide when
+each copy gets used. Nothing else is involved at render time: no script, no
+stylesheet, no parser. The shaper does the whole job.
+"""
+import logging
+import os
+
+from fontTools.colorLib.builder import buildCOLR, buildCPAL
+from fontTools.feaLib.builder import addOpenTypeFeatures
+from fontTools.misc.transform import Transform
+from fontTools.pens.recordingPen import DecomposingRecordingPen
+from fontTools.pens.transformPen import TransformPen
+from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.ttLib import TTFont
+from fontTools import subset
+
+from .grammar import GrammarError
+from .plan import CONTENT, MARKER, RUN
+
+NULL = 'gramnull'
+BAR_THICKNESS = 0.045
+Q = chr(39)   # the FEA mark suffix, kept out of the f-strings
+
+
+def join(*parts):
+    return ' '.join(p for p in parts if p)
+
+
+def hexcolor(text):
+    text = text.lstrip('#')
+    if len(text) not in (6, 8):
+        raise GrammarError(f'{text!r} is not a #rrggbb colour')
+    parts = [int(text[i:i + 2], 16) / 255 for i in range(0, len(text), 2)]
+    return tuple(parts) if len(parts) == 4 else tuple(parts) + (1.0,)
+
+
+def redraw(glyphset, name, transform=None, bar=None):
+    """Copy an outline, optionally transformed, optionally with a bar added."""
+    rec = DecomposingRecordingPen(glyphset)
+    glyphset[name].draw(rec)
+    pen = TTGlyphPen(None)
+    rec.replay(TransformPen(pen, transform) if transform else pen)
+    if bar:
+        x0, y0, x1, y1 = bar
+        pen.moveTo((x0, y0))
+        pen.lineTo((x1, y0))
+        pen.lineTo((x1, y1))
+        pen.lineTo((x0, y1))
+        pen.closePath()
+    return pen.glyph()
+
+
+class Builder:
+    def __init__(self, grammar, shapes, base_path, family='gramfont', font_dir=None):
+        self.grammar, self.shapes, self.family = grammar, shapes, family
+        # A style names a font file; a bare name is looked for beside the base.
+        self.font_dir = font_dir or os.path.dirname(os.path.abspath(base_path))
+        self.font = TTFont(base_path)
+        self.alphabet = grammar.alphabet
+        self.markers = set(getattr(grammar, 'markers', ()))
+        self.text = [c for c in grammar.alphabet if c not in self.markers]
+        self._subset()
+        self.upem = self.font['head'].unitsPerEm
+        self.glyf, self.hmtx = self.font['glyf'], self.font['hmtx']
+        self.base_order = self.font.getGlyphOrder()[:]
+        self.added, self.colr, self.palette = [], {}, []
+
+    def _subset(self):
+        logging.getLogger('fontTools.subset').setLevel(logging.ERROR)
+        options = subset.Options()
+        options.layout_features, options.glyph_names = [], False
+        options.drop_tables += ['kern']
+        sub = subset.Subsetter(options=options)
+        sub.populate(unicodes=[ord(c) for c in self.alphabet])
+        sub.subset(self.font)
+        cmap = self.font.getBestCmap()
+        missing = [c for c in self.alphabet if ord(c) not in cmap]
+        if missing:
+            raise GrammarError('the base font has no glyph for '
+                               + ' '.join(repr(c) for c in missing))
+        self.name = {c: cmap[ord(c)] for c in self.alphabet}
+
+    # ------------------------------------------------------------- the glyphs
+
+    def build_glyphs(self):
+        for style, props in self.grammar.styles.items():
+            self._build_style(style, props)
+        pen = TTGlyphPen(None)
+        self.glyf[NULL] = pen.glyph()
+        self.hmtx[NULL] = (0, 0)
+        self.added.append(NULL)
+        self._finish_glyph_order()
+
+    def _build_style(self, style, props):
+        source, cmap, hmtx, upem = self._source(props)
+        scale = float(props.get('scale', 1.0)) * (self.upem / upem)
+        bar = props.get('rule')
+        colour = props.get('color')
+        for c in self.alphabet:
+            base = self.name[c]
+            target = f'{base}.{style}'
+            src_name = cmap.get(ord(c))
+            if src_name is None:
+                raise GrammarError(
+                    f'style {style}: its font has no glyph for {c!r}')
+            transform = Transform().scale(scale) if scale != 1 else None
+            advance = round(hmtx[src_name][0] * scale)
+            box = None
+            if bar is not None:
+                y = round(float(bar) * self.upem)
+                box = (0, y, advance, y + round(self.upem * BAR_THICKNESS))
+            self.glyf[target] = redraw(source, src_name, transform, box)
+            self.hmtx[target] = (advance, 0)
+            self.added.append(target)
+        if colour:
+            self._paint(style, colour)
+
+    def _source(self, props):
+        path = props.get('from') or props.get('font')
+        if not path:
+            return (self.font.getGlyphSet(), self.font.getBestCmap(),
+                    self.font['hmtx'], self.upem)
+        if not os.path.isabs(path) and not os.path.exists(path):
+            path = os.path.join(self.font_dir, path)
+        if not os.path.exists(path):
+            raise GrammarError(f'no font file at {path}')
+        other = TTFont(path)
+        return (other.getGlyphSet(), other.getBestCmap(), other['hmtx'],
+                other['head'].unitsPerEm)
+
+    def _paint(self, style, colour):
+        """A COLR base glyph cannot be its own layer, so the outline moves to a
+        duplicate and the glyph the text uses becomes an empty painted shell."""
+        index = len(self.palette)
+        self.palette.append(hexcolor(colour))
+        for c in self.alphabet:
+            target = f'{self.name[c]}.{style}'
+            layer = f'{target}l'
+            self.glyf[layer] = self.glyf[target]
+            self.hmtx[layer] = self.hmtx[target]
+            self.added.append(layer)
+            self.glyf[target] = TTGlyphPen(None).glyph()
+            self.colr[target] = [(layer, index)]
+
+    def _finish_glyph_order(self):
+        order = self.base_order + [g for g in self.added if g not in self.base_order]
+        assert len(order) == len(set(order)) == len(self.glyf.glyphs)
+        self.font.setGlyphOrder(order)
+        self.glyf.glyphOrder = order
+        self.font['maxp'].numGlyphs = len(order)
+        if self.colr:
+            self.font['COLR'] = buildCOLR(self.colr)
+            self.font['CPAL'] = buildCPAL([self.palette])
+
+    # -------------------------------------------------------------- the rules
+
+    def glyphs(self, chars):
+        return [self.name[c] for c in self.alphabet if c in chars]
+
+    def cls(self, chars):
+        return '[%s]' % ' '.join(self.glyphs(chars))
+
+    def styled(self, style, chars=None):
+        return '[%s]' % ' '.join(f'{g}.{style}'
+                                 for g in self.glyphs(chars or set(self.text)))
+
+    def feature(self):
+        lines = []
+        lines.append(f'@Any = {self.cls(set(self.text))};')
+        lines.append(f'@All = {self.cls(set(self.alphabet))};')
+        for style in self.grammar.styles:
+            # Two classes per style: the text glyphs, which is what a context
+            # matches on, and every glyph, which is what the lookup can write.
+            # A kept marker is only ever styled by the second one.
+            lines.append(f'@Any_{style} = {self.styled(style)};')
+            lines.append(f'@All_{style} = {self.styled(style, set(self.alphabet))};')
+            lines.append(f'lookup TO_{style} {{ sub @All by @All_{style}; }} TO_{style};')
+
+        # A longer opener has to be tried before a shorter one that prefixes it,
+        # or `**` never fires because `*` already consumed the position.
+        ordered = sorted(enumerate(self.shapes),
+                         key=lambda pair: (-len(pair[1].prefix), pair[0]))
+        names = []
+        for index, shape in ordered:
+            name = f'R{index}'
+            names.append(name)
+            lines.append(f'lookup {name} {{')
+            lines += ['  ' + rule for rule in self._rules(shape)]
+            lines.append(f'}} {name};')
+        lines.append('feature calt {')
+        lines += [f'  lookup {name};' for name in names]
+        lines.append('} calt;')
+        lines += self._hide(ordered)
+        return '\n'.join(lines) + '\n'
+
+    def _rules(self, shape):
+        style = shape.rule.style
+        prefix = [self.name[next(iter(a.chars))] for a in shape.prefix]
+        seed_chars = set(shape.body[0].chars)
+        backtracks = []
+        for kind, chars in shape.rule.guards:
+            if kind == 'preceded_by':
+                backtracks.append(self.cls(chars))
+            else:
+                seed_chars -= chars
+        if not seed_chars:
+            raise GrammarError(
+                f'{shape.rule.name}: the guards rule out every character the '
+                f'pattern could start with', shape.rule.line)
+        if shape.line_start:
+            # OpenType has no line anchor. A shaping run stops at a newline, so
+            # "there is nothing to backtrack over" is the same test.
+            backtracks.append('@All')
+        # The closing marker looks exactly like the opening one. Without this
+        # the rule re-seeds on it and the span never ends.
+        backtracks.append(f'@Any_{style}')
+
+        seed = self.cls(seed_chars)
+        rules = [join('ignore sub', back, *prefix, seed + Q) + ';'
+                 for back in backtracks]
+        if shape.spans:
+            rules.append(join('sub', *prefix, seed + Q, f'lookup TO_{style}') + ';')
+            rules.append(f'sub @Any_{style} @Any{Q} lookup TO_{style};')
+        else:
+            marked = [f'{self.cls(a.chars)}{Q} lookup TO_{style}' for a in shape.body]
+            tail = [self.name[next(iter(a.chars))] for a in shape.suffix]
+            rules.append(join('sub', *prefix, *marked, *tail) + ';')
+        return rules
+
+    def _hide(self, ordered):
+        """A marker is only a marker once it has actually styled something.
+
+        Hiding it unconditionally is what eats the asterisks in `2 * 3` and the
+        hash in `C#`. Keying the substitution on a styled neighbour leaves every
+        delimiter that styled nothing on the page, where it belongs.
+        """
+        markers = sorted({c for shape in self.shapes if not shape.rule.keep
+                          for atom in shape.prefix + shape.suffix
+                          for c in atom.chars})
+        hide = []
+        for _, shape in ordered:
+            if shape.rule.keep:
+                continue
+            style = shape.rule.style
+            for part, template in ((shape.prefix, '  sub {} @Any_{};'),
+                                   (shape.suffix, '  sub @Any_{1} {0};')):
+                if not part:
+                    continue
+                marked = ' '.join(
+                    f'{self.name[next(iter(a.chars))]}{Q} lookup TO_NULL'
+                    for a in part)
+                hide.append(template.format(marked, style))
+        lines = []
+        if hide:
+            lines.append('lookup TO_NULL {')
+            lines += [f'  sub {self.name[c]} by {NULL};' for c in markers]
+            lines.append('} TO_NULL;')
+            lines.append('lookup HIDE {')
+            lines += hide
+            lines.append('} HIDE;')
+            lines.append('feature calt { lookup HIDE; } calt;')
+
+        # A kept marker is part of the text, so it takes the style too. This
+        # runs after the spans are settled, keyed on a styled neighbour for the
+        # same reason the hide pass is.
+        kept = []
+        for _, shape in ordered:
+            if not shape.rule.keep or not shape.prefix:
+                continue
+            style = shape.rule.style
+            opening = ' '.join(
+                f'{self.name[next(iter(a.chars))]}{Q} lookup TO_{style}'
+                for a in shape.prefix)
+            kept.append(f'  sub {opening} @Any_{style};')
+        if kept:
+            lines.append('lookup MARK {')
+            lines += kept
+            lines.append('} MARK;')
+            lines.append('feature calt { lookup MARK; } calt;')
+        return lines
+
+    # ------------------------------------------------------------------ output
+
+    def save(self, path, fea_path=None):
+        fea = self.feature()
+        fea_path = fea_path or os.path.splitext(path)[0] + '.fea'
+        with open(fea_path, 'w', encoding='utf-8') as handle:
+            handle.write(fea)
+        addOpenTypeFeatures(self.font, fea_path)
+        for name_id in (1, 4, 6):
+            self.font['name'].setName(self.family, name_id, 3, 1, 0x409)
+        self.font.save(path)
+        woff2 = os.path.splitext(path)[0] + '.woff2'
+        self.font.flavor = 'woff2'
+        self.font.save(woff2)
+        self.font.flavor = None
+        return path, woff2, fea_path

@@ -1,0 +1,15 @@
+(* This one does not compile, on purpose. It is the boundary.
+
+   `emphasis` is defined in terms of itself, which is how you write arbitrary
+   nesting in EBNF and exactly what a font cannot run. A lookup has no stack,
+   so it cannot know how deep it is. Run it with --check to see the error. *)
+
+alphabet = " a-z*";
+markers  = "*";
+
+style bold = from "LiberationSans-Bold.ttf";
+
+inner    = { any } | emphasis;
+emphasis = "*" , inner , "*";
+
+strong = "**" , emphasis , "**" -> bold;
