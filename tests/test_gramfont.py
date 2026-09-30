@@ -218,6 +218,34 @@ class FontTest(unittest.TestCase):
         order = [line for line in fea.splitlines() if line.startswith('lookup R')]
         self.assertTrue(order[0].startswith('lookup R1'), order)
 
+    def test_a_saved_font_passes_the_structural_checks_a_foundry_runs(self):
+        """The window has to cover the glyphs, or scaled headings clip."""
+        import tempfile
+        from fontTools.ttLib import TTFont
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        with tempfile.TemporaryDirectory() as tmp:
+            font = TTFont(builder.save(os.path.join(tmp, 'x.ttf'))[0])
+        os2, hhea = font['OS/2'], font['hhea']
+        self.assertEqual(hhea.lineGap, 0)
+        self.assertEqual(os2.sTypoAscender, hhea.ascent)
+        self.assertGreater(os2.usWinAscent, hhea.ascent, 'headings are taller than the line')
+        self.assertGreaterEqual(os2.version, 4)
+        self.assertTrue(os2.fsSelection & (1 << 7))
+        cmap = font.getBestCmap()
+        self.assertIn(0xA0, cmap, 'no-break space')
+        self.assertNotIn(0xAD, cmap, 'soft hyphen')
+        self.assertGreater(font['glyf']['.notdef'].numberOfContours, 0)
+        for name in font.getGlyphOrder():
+            glyph = font['glyf'][name]
+            if glyph.isComposite():
+                for component in glyph.components:
+                    self.assertFalse(hasattr(component, 'transform'),
+                                     f'{name} scales a component')
+
     def test_the_font_saves_and_reloads(self):
         import tempfile
         from fontTools.ttLib import TTFont

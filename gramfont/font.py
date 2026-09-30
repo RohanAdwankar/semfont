@@ -75,6 +75,10 @@ class Builder:
         options = subset.Options()
         options.layout_features, options.glyph_names = [], False
         options.drop_tables += ['kern']
+        # Hinting instructions do not survive being copied into composites and
+        # scaled, and a font this size is read on screens that do not need them.
+        options.hinting = False
+        options.notdef_outline = True
         sub = subset.Subsetter(options=options)
         sub.populate(unicodes=[ord(c) for c in self.alphabet])
         sub.subset(self.font)
@@ -125,23 +129,31 @@ class Builder:
         return tag
 
     def make_bar_unit(self):
-        """One em-wide bar, reused as a scaled component by every ruled state.
+        """Bars are shared per advance width, not drawn into every glyph.
 
-        Drawing the bar into each glyph would mean a fresh outline per state.
-        As a component it is a reference, so underline and strikethrough cost
-        almost nothing across all the combinations they appear in.
+        One bar glyph per distinct width is referenced as an untransformed
+        component by every ruled state, placed only by a vertical offset.
+        Scaling one unit bar would need fewer glyphs, but a scaled component
+        is what font validators flag, and the saving is a few dozen outlines.
         """
-        pen = TTGlyphPen(None)
-        height = round(self.upem * BAR_THICKNESS)
-        pen.moveTo((0, 0))
-        pen.lineTo((self.upem, 0))
-        pen.lineTo((self.upem, height))
-        pen.lineTo((0, height))
-        pen.closePath()
-        self.glyf['barunit'] = pen.glyph()
-        self.hmtx['barunit'] = (self.upem, 0)
-        self.added.append('barunit')
-        return 'barunit'
+        self.bars = {}
+        return None
+
+    def _bar(self, advance):
+        if advance not in self.bars:
+            pen = TTGlyphPen(None)
+            height = round(self.upem * BAR_THICKNESS)
+            pen.moveTo((0, 0))
+            pen.lineTo((advance, 0))
+            pen.lineTo((advance, height))
+            pen.lineTo((0, height))
+            pen.closePath()
+            name = f'bar{advance}'
+            self.glyf[name] = pen.glyph()
+            self.hmtx[name] = (advance, 0)
+            self.added.append(name)
+            self.bars[advance] = name
+        return self.bars[advance]
 
     def make_state_glyphs(self, tag, face_tag, bars, colour, bar_glyph):
         index = None
@@ -154,8 +166,8 @@ class Builder:
             pen = TTGlyphPen(self.glyf.glyphs)
             pen.addComponent(source, (1, 0, 0, 1, 0, 0))
             for offset in bars:
-                pen.addComponent(bar_glyph, (advance / self.upem, 0, 0, 1, 0,
-                                             round(offset * self.upem)))
+                pen.addComponent(self._bar(advance), (1, 0, 0, 1, 0,
+                                                      round(offset * self.upem)))
             drawn = pen.glyph()
             target = f'{self.name[char]}.{tag}'
             if colour:
@@ -463,12 +475,65 @@ class Builder:
 
     # ------------------------------------------------------------------ output
 
+    def _finish(self):
+        """What a font needs to pass a foundry's checks, none of it grammar.
+
+        Vertical metrics are taken from the glyphs actually drawn, because a
+        heading scaled 1.5x reaches well above the base font's ascender and a
+        window that clips it shows up as cut-off headings on Windows.
+        """
+        from fontTools.pens.boundsPen import BoundsPen
+        from fontTools.ttLib import newTable
+        from fontTools.ttLib.tables import ttProgram
+        font = self.font
+        glyphs = font.getGlyphSet()
+        top, bottom = 0, 0
+        for name in font.getGlyphOrder():
+            pen = BoundsPen(glyphs)
+            glyphs[name].draw(pen)
+            if pen.bounds:
+                bottom, top = min(bottom, pen.bounds[1]), max(top, pen.bounds[3])
+        os2, hhea = font['OS/2'], font['hhea']
+        # Line spacing stays the base font's. Only the clipping window grows.
+        ascent, descent = hhea.ascent, hhea.descent
+        hhea.lineGap = 0
+        os2.sTypoAscender, os2.sTypoDescender, os2.sTypoLineGap = ascent, descent, 0
+        os2.usWinAscent, os2.usWinDescent = max(ascent, top), max(-descent, -bottom)
+        os2.version = max(os2.version, 4)   # bit 7 is undefined before version 4
+        os2.fsSelection |= 1 << 7   # USE_TYPO_METRICS
+        # With hinting gone, smart dropout keeps thin strokes from vanishing.
+        font['gasp'] = newTable('gasp')
+        font['gasp'].version = 1
+        font['gasp'].gaspRange = {0xFFFF: 0x000F}
+        prep = newTable('prep')
+        prep.program = ttProgram.Program()
+        prep.program.fromBytecode(bytes([0xb8, 0x01, 0xff, 0x85, 0xb0, 0x04, 0x8d]))
+        font['prep'] = prep
+        self._ensure_notdef()
+
+    def _ensure_notdef(self):
+        glyph = self.glyf['.notdef']
+        if glyph.numberOfContours != 0:
+            return
+        em = self.upem
+        pen = TTGlyphPen(None)
+        for inset, clockwise in ((0.08, True), (0.14, False)):
+            a, b = round(em * inset), round(em * (0.72 - inset * 0.2))
+            c = round(em * 0.45)
+            pts = [(a, 0), (a, b), (c, b), (c, 0)]
+            for i, pt in enumerate(pts if clockwise else pts[::-1]):
+                (pen.moveTo if i == 0 else pen.lineTo)(pt)
+            pen.closePath()
+        self.glyf['.notdef'] = pen.glyph()
+        self.hmtx['.notdef'] = (round(em * 0.5), 0)
+
     def save(self, path, fea_path=None):
         fea = self.feature()
         fea_path = fea_path or os.path.splitext(path)[0] + '.fea'
         with open(fea_path, 'w', encoding='utf-8') as handle:
             handle.write(fea)
         addOpenTypeFeatures(self.font, fea_path)
+        self._finish()
         for name_id in (1, 4, 6):
             self.font['name'].setName(self.family, name_id, 3, 1, 0x409)
         self.font.save(path)

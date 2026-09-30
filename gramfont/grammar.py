@@ -88,6 +88,13 @@ ESCAPES = {'n': '\n', 't': '\t', '\\': '\\', '"': '"'}
 def unescape(text):
     out, i = [], 0
     while i < len(text):
+        if text[i] == '\\' and text[i + 1:i + 2] == 'u' and i + 5 < len(text) + 0:
+            try:
+                out.append(chr(int(text[i + 2:i + 6], 16)))
+                i += 6
+                continue
+            except ValueError:
+                pass
         if text[i] == '\\' and i + 1 < len(text):
             out.append(ESCAPES.get(text[i + 1], text[i + 1]))
             i += 2

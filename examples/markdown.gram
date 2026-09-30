@@ -6,7 +6,9 @@
    states, and the font carries the current one in the glyph stream, so
    nesting works at any depth with nothing unrolled. *)
 
-alphabet = " !\"'()[],-./0-9:;?A-Za-z*_~`#";
+(* Printable ASCII and Latin-1, plus the punctuation prose actually uses. *)
+(* Everything but U+00AD, the soft hyphen, which Google Fonts asks for no one to ship. *)
+alphabet = " -~\u00a0-¬®-ÿ‘’“”–—…•€™";
 
 (* Every combination of the face attributes below needs a file. *)
 face                  = "LiberationSans-Regular.ttf";
