@@ -277,24 +277,37 @@ transform. React is a peer, and only `SemanticText.js` imports it.
 
 ## As a font file
 
-`font/build.py` bakes the valence channel into an actual `.ttf`. Every word in
-the lexicon becomes a contextual substitution inside the font, and `COLR` and
-`CPAL` supply the colour, so a plain `<div>` with the font set on it comes out
-coloured with no script on the page at all.
+`font/build.py` bakes the valence channel into an actual `.ttf`, so a plain
+`<div>` with the font set on it comes out coloured with no script on the page.
+Every lexicon word, and every real inflected form of one, is a substitution
+rule inside the font. `COLR` and `CPAL` supply the colour.
 
 ```bash
-pip install fonttools
+pip install fonttools wordfreq
 python3 font/build.py --base /path/to/Regular.ttf --out semfont.ttf
 ```
 
-The whole 4,065-word lexicon fits in 61 KB of woff2. The lexicon and the theme
-are read out of `src/` at build time, so the font cannot drift from what
-`analyze()` would say about the same text.
+It also reproduces the clause pass. A negator (`not`, `never`, `don't`) flips
+the colour of what follows it until the clause ends, a second negator cancels
+the first, and a resolver (`fixed`, `avoided`) turns the harm after it into
+relief. The state rides along in the glyph stream as two bits, so the font
+needs no memory beyond the glyph it is looking at. The lexicon, the theme and
+the negator, resolver and clause-break lists are read out of `src/` at build
+time.
 
-Only valence survives the trip. Weight, size and tracking are the other things
-a theme renders, and a static font cannot vary those per word. Nor does the
-font stem: `analyze()` scores `crashing` from `crash`, and the font only knows
-the forms it was given a rule for.
+`font/parity.py` measures the result against `analyze()` on the demo passages,
+this README and sixteen sentences written to stress negation. It agrees on the
+sign of 89 of the 90 words the library colours, and on the exact colour level
+for 79 of them. The one wrong sign is "the crash is gone", which the library
+handles by looking backwards.
+
+What it does not do: weight, size, tracking, highlight and slant, which a
+static font cannot vary per word. Intensifiers (`very`, `totally`) are not
+modelled, so those words come out a step lighter than the library's. And in
+Chrome a soft line wrap resets the shaper, so a `not` and the word it negates
+on opposite sides of a wrap colour as if the `not` were absent.
+
+The whole thing is 148 KB of woff2.
 
 ## What it gets wrong
 

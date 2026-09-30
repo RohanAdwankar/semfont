@@ -23,7 +23,7 @@
 
 import { lookup } from './lexicon.js';
 
-const NEGATORS = new Set([
+export const NEGATORS = new Set([
   'not', 'no', 'never', 'none', 'nothing', 'nobody', 'neither', 'nor',
   'cannot', 'cant', 'wont', 'dont', 'doesnt', 'didnt', 'isnt', 'arent',
   'wasnt', 'werent', 'without', 'lacks', 'lacking', 'hardly', 'rarely',
@@ -57,7 +57,7 @@ const SARCASM_PHRASES = [
 const REJECTS = new Set(['wrong', 'false', 'untrue', 'nonsense', 'unfair', 'mistaken', 'incorrect', 'disagree', 'rubbish', 'absurd', 'baseless']);
 
 // Clause breaks: punctuation, and the conjunctions that start a new one.
-const CLAUSE_WORDS = new Set([
+export const CLAUSE_WORDS = new Set([
   'and', 'but', 'or', 'because', 'since', 'while', 'although', 'though',
   'whereas', 'unless', 'until', 'if', 'when', 'which', 'who', 'yet', 'however',
   'then', 'except',
