@@ -125,10 +125,11 @@ def main(argv=None):
     ap.add_argument('--threshold', type=float, default=0.2)
     ap.add_argument('--levels', type=int, default=6)
     ap.add_argument('--show', type=int, default=25, help='how many disagreements to print')
-    ap.add_argument('--no-readme', action='store_true')
+    ap.add_argument('--readme', action='store_true',
+                    help='also use the README prose (its own numbers change the corpus, so off by default)')
     args = ap.parse_args(argv)
 
-    sentences = CURATED + demo_passages() + ([] if args.no_readme else prose_from_readme())
+    sentences = CURATED + demo_passages() + (prose_from_readme() if args.readme else [])
     shaper = Shaper(args.font, args.levels)
     tally = dict(both_plain=0, exact=0, same_sign=0, wrong_sign=0, missed=0, extra=0)
     misses = []

@@ -295,11 +295,11 @@ needs no memory beyond the glyph it is looking at. The lexicon, the theme and
 the negator, resolver and clause-break lists are read out of `src/` at build
 time.
 
-`font/parity.py` measures the result against `analyze()` on the demo passages,
-this README and sixteen sentences written to stress negation. It agrees on the
-sign of 89 of the 90 words the library colours, and on the exact colour level
-for 79 of them. The one wrong sign is "the crash is gone", which the library
-handles by looking backwards.
+`font/parity.py` measures the result against `analyze()` on the demo passages
+and sixteen sentences written to stress negation. The library colours 60 words
+in them. The font agrees on the sign of 59 and on the exact colour level for 52,
+where a plain word list agrees on the sign of 41. The one wrong sign is "the
+crash is gone", which the library handles by looking backwards.
 
 What it does not do: weight, size, tracking, highlight and slant, which a
 static font cannot vary per word. Intensifiers (`very`, `totally`) are not
