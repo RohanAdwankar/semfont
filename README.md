@@ -275,6 +275,27 @@ no build step.
 in the browser as-is, using `createElement` rather than JSX so it needs no
 transform. React is a peer, and only `SemanticText.js` imports it.
 
+## As a font file
+
+`font/build.py` bakes the valence channel into an actual `.ttf`. Every word in
+the lexicon becomes a contextual substitution inside the font, and `COLR` and
+`CPAL` supply the colour, so a plain `<div>` with the font set on it comes out
+coloured with no script on the page at all.
+
+```bash
+pip install fonttools
+python3 font/build.py --base /path/to/Regular.ttf --out semfont.ttf
+```
+
+The whole 4,065-word lexicon fits in 61 KB of woff2. The lexicon and the theme
+are read out of `src/` at build time, so the font cannot drift from what
+`analyze()` would say about the same text.
+
+Only valence survives the trip. Weight, size and tracking are the other things
+a theme renders, and a static font cannot vary those per word. Nor does the
+font stem: `analyze()` scores `crashing` from `crash`, and the font only knows
+the forms it was given a rule for.
+
 ## What it gets wrong
 
 Sarcasm, irony, and domain jargon it has not been taught. The lexicons are a
