@@ -246,6 +246,55 @@ class FontTest(unittest.TestCase):
                     self.assertFalse(hasattr(component, 'transform'),
                                      f'{name} scales a component')
 
+    def test_line_height_meets_the_minimum_and_the_script_is_declared(self):
+        """Google wants hhea ascender + descender + line gap of at least 1.2 em,
+        and a meta table naming the script the alphabet is written in."""
+        import tempfile
+        from fontTools.ttLib import TTFont
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        with tempfile.TemporaryDirectory() as tmp:
+            font = TTFont(builder.save(os.path.join(tmp, 'x.ttf'))[0])
+        hhea, os2, upem = font['hhea'], font['OS/2'], font['head'].unitsPerEm
+        self.assertGreaterEqual(hhea.ascent - hhea.descent + hhea.lineGap, 1.2 * upem)
+        self.assertEqual((os2.sTypoAscender, os2.sTypoDescender), (hhea.ascent, hhea.descent))
+        self.assertEqual(font['meta'].data['dlng'], 'Latn')
+
+    def test_a_zero_width_glyph_is_not_given_an_underline(self):
+        """A combining accent has no advance. A bar of width zero is a
+        degenerate contour that validators flag as wound the wrong way."""
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        self.assertNotIn('bar0', builder.font.getGlyphOrder())
+
+    def test_the_markdown_alphabet_reaches_latin_extended_a(self):
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        alphabet = check_regular(parse(source)).alphabet
+        for char in ('\u0100', '\u017e', '\u0300', '\u2212', 'é', '\u00a0'):
+            self.assertIn(char, alphabet)
+        self.assertNotIn('\u00ad', alphabet, 'the soft hyphen is left out on purpose')
+
+    def test_a_face_missing_one_character_falls_back_with_a_warning(self):
+        """Liberation Mono has no dotless j. That should cost a warning, not
+        the build."""
+        mono = LIBERATION / 'LiberationMono-Regular.ttf'
+        source = ('alphabet = "a-z *\\u0237";\nmarkers = "*";\n'
+                  f'face = "{LIBERATION / "LiberationSans-Regular.ttf"}";\n'
+                  f'face mono = "{mono}";\n'
+                  'toggle code = "*" -> mono;')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        with self.assertWarns(UserWarning) as caught:
+            builder.build_glyphs()
+        self.assertIn('U+0237', str(caught.warning))
+
     def test_the_font_saves_and_reloads(self):
         import tempfile
         from fontTools.ttLib import TTFont

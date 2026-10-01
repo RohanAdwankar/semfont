@@ -4,7 +4,7 @@ Write a grammar. Get a font that renders it.
 
 ```
 $ gramfont examples/markdown.gram --base LiberationSans-Regular.ttf -o markfont.ttf
-markfont.ttf 554 KB, markfont.woff2 110 KB
+markfont.ttf 910 KB, markfont.woff2 155 KB
 ```
 
 Set that font on a plain `<div>` of Markdown source and the Markdown renders.
@@ -62,7 +62,7 @@ the state after the flip, and one lookup walking left to right reads its own
 output as backtrack. Depth is not tracked because depth does not matter:
 `*a **b ~~c `d` e~~ f** g*` comes out right, and so would twenty more levels.
 
-Five toggles is 32 states. With headings and all of Latin-1 that is 110 KB of
+Five toggles is 32 states. With headings and the Latin Core character set that is 155 KB of
 woff2, and six toggles is the cap because every state holds a copy of the
 whole alphabet.
 
