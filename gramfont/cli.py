@@ -13,6 +13,9 @@ def main(argv=None):
     ap.add_argument('-o', '--out', default=None, help='output .ttf (a .woff2 is written beside it)')
     ap.add_argument('--base', required=True, help='the regular font the alphabet comes from')
     ap.add_argument('--family', default=None)
+    ap.add_argument('--copyright', default=None,
+                    help='the full copyright notice for nameID 0, including the base font\'s own')
+    ap.add_argument('--version', default='1.000')
     ap.add_argument('--fonts', default=None,
                     help='where a style\'s font file is looked for (default: beside --base)')
     ap.add_argument('--check', action='store_true', help='validate the grammar and stop')
@@ -27,7 +30,8 @@ def main(argv=None):
             shapes, _ = plan(check_regular(parse(source)))
             print(f'{args.grammar}: {len(shapes)} rule shapes, all regular')
             return 0
-        ttf, woff2, fea = compile_font(source, args.base, out, family, args.fonts)
+        ttf, woff2, fea = compile_font(source, args.base, out, family, args.fonts,
+                                         args.copyright, args.version)
     except GrammarError as error:
         print(f'{args.grammar}: {error}', file=sys.stderr)
         return 1

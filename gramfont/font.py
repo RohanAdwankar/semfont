@@ -55,8 +55,10 @@ def redraw(glyphset, name, transform=None, bar=None):
 
 
 class Builder:
-    def __init__(self, grammar, shapes, base_path, family='gramfont', font_dir=None):
+    def __init__(self, grammar, shapes, base_path, family='gramfont', font_dir=None,
+                 copyright=None, version='1.000'):
         self.grammar, self.shapes, self.family = grammar, shapes, family
+        self.copyright, self.version = copyright, version
         # A style names a font file; a bare name is looked for beside the base.
         self.font_dir = font_dir or os.path.dirname(os.path.abspath(base_path))
         self.font = TTFont(base_path)
@@ -511,6 +513,28 @@ class Builder:
         font['prep'] = prep
         self._ensure_notdef()
 
+    def _set_names(self):
+        """Names a font distributed on its own has to carry.
+
+        With `copyright` the notice is replaced by exactly that text, so it
+        has to carry the base font's own notice as well: every licence worth
+        using requires it. Without `copyright` the base font's notice is left
+        as it was.
+        """
+        table = self.font['name']
+        ps = self.family.replace(' ', '') + '-Regular'
+        names = {1: self.family, 2: 'Regular', 3: f'{self.version};{ps}',
+                 4: f'{self.family} Regular', 5: f'Version {self.version}', 6: ps}
+        if self.copyright:
+            names[0] = self.copyright.strip()
+            names[13] = ('This Font Software is licensed under the SIL Open Font License, '
+                         'Version 1.1. This license is available with a FAQ at: '
+                         'https://openfontlicense.org')
+            names[14] = 'https://openfontlicense.org'
+        for name_id, value in names.items():
+            table.setName(value, name_id, 3, 1, 0x409)
+        self.font['head'].fontRevision = float(self.version)
+
     def _ensure_notdef(self):
         glyph = self.glyf['.notdef']
         if glyph.numberOfContours != 0:
@@ -534,8 +558,7 @@ class Builder:
             handle.write(fea)
         addOpenTypeFeatures(self.font, fea_path)
         self._finish()
-        for name_id in (1, 4, 6):
-            self.font['name'].setName(self.family, name_id, 3, 1, 0x409)
+        self._set_names()
         self.font.save(path)
         woff2 = os.path.splitext(path)[0] + '.woff2'
         self.font.flavor = 'woff2'

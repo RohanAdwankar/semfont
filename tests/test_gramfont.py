@@ -257,5 +257,40 @@ class FontTest(unittest.TestCase):
             self.assertTrue(os.path.getsize(woff2) > 0)
 
 
+def load_prepare():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('prepare', ROOT / 'google-fonts' / 'prepare.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class SubmissionTest(unittest.TestCase):
+    def test_the_notice_has_the_shape_google_requires_and_keeps_the_upstream_ones(self):
+        """First line: Copyright YEAR The X Project Authors (git url). The
+        Liberation notices must ride along, because the licence requires them."""
+        import re
+        prepare = load_prepare()
+        line = prepare.notice('https://github.com/someone/somefont', 2026)
+        self.assertRegex(line, r'^Copyright 2026 The Markfont Project Authors \(https://github\.com/someone/somefont\)')
+        self.assertIn('Red Hat, Inc.', line)
+        self.assertIn('Google Corporation', line)
+        self.assertNotIn('\n', line, 'Google compares only the first line')
+
+    def test_the_template_is_the_licence_with_one_line_to_fill_in(self):
+        text = (ROOT / 'google-fonts' / 'OFL.template.txt').read_text(encoding='utf-8')
+        self.assertTrue(text.startswith('{copyright}\n\nThis Font Software is licensed'))
+        self.assertEqual(text.count('{copyright}'), 1)
+        self.assertIn('SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007', text)
+
+    def test_a_repository_url_is_required_and_checked_rather_than_guessed(self):
+        prepare = load_prepare()
+        with self.assertRaises(SystemExit):
+            prepare.main(['--base', str(BASE)])
+        with self.assertRaises(SystemExit) as caught:
+            prepare.main(['--repo-url', 'not a url', '--base', str(BASE)])
+        self.assertIn('--repo-url', str(caught.exception))
+
+
 if __name__ == '__main__':
     unittest.main()
