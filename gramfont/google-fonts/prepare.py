@@ -3,7 +3,8 @@
     python3 google-fonts/prepare.py --repo-url https://github.com/<owner>/<repo> \\
         --base /path/to/LiberationSans-Regular.ttf
 
-Writes ofl/markfont/{Markfont-Regular.ttf,OFL.txt} next to this script. The
+Writes ofl/markfont/{Markfont-Regular.ttf,OFL.txt} next to this script and runs
+Google's fontbakery profile over the font. The
 repository URL goes into the copyright line, which Google's checks require and
 which has to name the repository the font is maintained in, so it is an
 argument rather than a guess.
@@ -35,15 +36,6 @@ FAMILY = 'Markfont'
 UPSTREAM = ('Digitized data copyright (c) 2010 Google Corporation with Reserved Font '
             'Arimo, Tinos and Cousine, and Copyright (c) 2012 Red Hat, Inc. with '
             'Reserved Font Name Liberation.')
-CHECKS = [
-    'googlefonts/family/has_license', 'googlefonts/font_copyright',
-    'googlefonts/license/OFL_body_text', 'googlefonts/license/OFL_copyright',
-    'googlefonts/name/license', 'googlefonts/name/license_url',
-    'googlefonts/name/rfn', 'googlefonts/name/mandatory_entries',
-    'googlefonts/name/version_format', 'googlefonts/vendor_id',
-    'opentype/font_version', 'name/char_restrictions',
-    'opentype/name/match_familyname_fullfont',
-]
 
 
 def notice(repo_url, year):
@@ -52,12 +44,35 @@ def notice(repo_url, year):
 
 
 def run_checks(folder, font):
-    for check in CHECKS:
-        done = subprocess.run(
-            ['fontbakery', 'check-googlefonts', font, '-c', check, '-l', 'PASS', '-C',
-             '--no-progress'], cwd=folder, capture_output=True, text=True)
-        result = re.search(r'Result: (\w+)', done.stdout)
-        print(f'  {result.group(1) if result else "?":5} {check}')
+    """Google's whole fontbakery profile, summarised.
+
+    A partial run is the trap here. Without the profile's optional packages
+    installed, fontbakery quietly runs about two thirds of the checks and says
+    so only in its last lines, which is how a missing-glyphs failure once
+    went unseen. So the count of checks that ran is printed, and a partial
+    run is called out.
+    """
+    done = subprocess.run(
+        ['fontbakery', 'check-googlefonts', font, '-l', 'PASS', '-C', '--no-progress'],
+        cwd=folder, capture_output=True, text=True)
+    out = done.stdout + done.stderr
+    sections = re.split(r'\n >> ', '\n' + out)[1:]
+    found = {}
+    for section in sections:
+        name = section.split('\n', 1)[0].strip()
+        result = re.search(r'Result: (\w+)', section)
+        if result:
+            found.setdefault(result.group(1), []).append(name)
+    for level in ('ERROR', 'FAIL', 'WARN'):
+        for name in found.get(level, []):
+            print(f'  {level:5} {name}')
+    ran = sum(len(v) for k, v in found.items() if k != 'SKIP')
+    summary = ', '.join(f'{len(v)} {k}' for k, v in sorted(found.items())
+                        if k in ('PASS', 'WARN', 'FAIL', 'ERROR'))
+    print(f'  {ran} checks ran: {summary or "none"}')
+    if "googlefonts' extra" in out:
+        print("  PARTIAL RUN: install fontbakery's googlefonts extra, or this misses checks.")
+    return not found.get('FAIL') and not found.get('ERROR')
 
 
 def main(argv=None):
@@ -86,7 +101,7 @@ def main(argv=None):
     print(f'wrote {folder}/ ({os.path.getsize(font) // 1024} KB)')
     if not args.no_checks:
         print("Google's checks:")
-        run_checks(folder, f'{FAMILY}-Regular.ttf')
+        return 0 if run_checks(folder, f'{FAMILY}-Regular.ttf') else 1
     return 0
 
 

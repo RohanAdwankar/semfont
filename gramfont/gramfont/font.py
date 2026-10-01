@@ -6,7 +6,10 @@ each copy gets used. Nothing else is involved at render time: no script, no
 stylesheet, no parser. The shaper does the whole job.
 """
 import logging
+import math
 import os
+import unicodedata
+import warnings
 
 from fontTools.colorLib.builder import buildCOLR, buildCPAL
 from fontTools.feaLib.builder import addOpenTypeFeatures
@@ -47,9 +50,9 @@ def redraw(glyphset, name, transform=None, bar=None):
     if bar:
         x0, y0, x1, y1 = bar
         pen.moveTo((x0, y0))
-        pen.lineTo((x1, y0))
-        pen.lineTo((x1, y1))
         pen.lineTo((x0, y1))
+        pen.lineTo((x1, y1))
+        pen.lineTo((x1, y0))
         pen.closePath()
     return pen.glyph()
 
@@ -116,18 +119,31 @@ class Builder:
                 other['head'].unitsPerEm)
 
     def copy_face(self, face, tag):
-        """One real outline per character, scaled to this font's em."""
+        """One real outline per character, scaled to this font's em.
+
+        A face that lacks a character the alphabet asks for falls back to the
+        base font's glyph for it, with a warning, rather than refusing to
+        build: a rare letter missing from one weight should not cost the font.
+        """
         source, cmap, hmtx, upem = face
         scale = self.upem / upem
+        missing = []
         for char in self.alphabet:
             name = cmap.get(ord(char))
-            if name is None:
-                raise GrammarError(f'a face has no glyph for {char!r}')
             target = f'{self.name[char]}.{tag}'
-            self.glyf[target] = redraw(
-                source, name, Transform().scale(scale) if scale != 1 else None)
-            self.hmtx[target] = (round(hmtx[name][0] * scale), 0)
+            if name is None:
+                missing.append(char)
+                self.glyf[target] = redraw(self.font.getGlyphSet(), self.name[char])
+                self.hmtx[target] = (self.hmtx[self.name[char]][0], 0)
+            else:
+                self.glyf[target] = redraw(
+                    source, name, Transform().scale(scale) if scale != 1 else None)
+                self.hmtx[target] = (round(hmtx[name][0] * scale), 0)
             self.added.append(target)
+        if missing:
+            warnings.warn(
+                'a face has no glyph for ' + ' '.join(f'U+{ord(c):04X}' for c in missing)
+                + "; the base font's is used instead", stacklevel=2)
         return tag
 
     def make_bar_unit(self):
@@ -146,9 +162,9 @@ class Builder:
             pen = TTGlyphPen(None)
             height = round(self.upem * BAR_THICKNESS)
             pen.moveTo((0, 0))
-            pen.lineTo((advance, 0))
-            pen.lineTo((advance, height))
             pen.lineTo((0, height))
+            pen.lineTo((advance, height))
+            pen.lineTo((advance, 0))
             pen.closePath()
             name = f'bar{advance}'
             self.glyf[name] = pen.glyph()
@@ -167,7 +183,9 @@ class Builder:
             advance = self.hmtx[source][0]
             pen = TTGlyphPen(self.glyf.glyphs)
             pen.addComponent(source, (1, 0, 0, 1, 0, 0))
-            for offset in bars:
+            # A combining accent has no advance, so there is nothing to underline
+            # and a zero-width bar would only be a degenerate contour.
+            for offset in (bars if advance > 0 else ()):
                 pen.addComponent(self._bar(advance), (1, 0, 0, 1, 0,
                                                       round(offset * self.upem)))
             drawn = pen.glyph()
@@ -496,8 +514,16 @@ class Builder:
             if pen.bounds:
                 bottom, top = min(bottom, pen.bounds[1]), max(top, pen.bounds[3])
         os2, hhea = font['OS/2'], font['hhea']
-        # Line spacing stays the base font's. Only the clipping window grows.
+        # Line spacing starts as the base font's. Google wants the three metrics
+        # to add up to at least 1.2 em, and a base font drawn for tighter lines
+        # is padded to it, evenly above and below. The clipping window below is
+        # separate, and is what stops scaled headings being cut off.
         ascent, descent = hhea.ascent, hhea.descent
+        shortfall = math.ceil(1.2 * self.upem) - (ascent - descent)
+        if shortfall > 0:
+            ascent += shortfall - shortfall // 2
+            descent -= shortfall // 2
+        hhea.ascent, hhea.descent = ascent, descent
         hhea.lineGap = 0
         os2.sTypoAscender, os2.sTypoDescender, os2.sTypoLineGap = ascent, descent, 0
         os2.usWinAscent, os2.usWinDescent = max(ascent, top), max(-descent, -bottom)
@@ -512,6 +538,8 @@ class Builder:
         prep.program.fromBytecode(bytes([0xb8, 0x01, 0xff, 0x85, 0xb0, 0x04, 0x8d]))
         font['prep'] = prep
         self._ensure_notdef()
+        os2.recalcAvgCharWidth(font)
+        self._declare_scripts()
 
     def _set_names(self):
         """Names a font distributed on its own has to carry.
@@ -534,6 +562,23 @@ class Builder:
         for name_id, value in names.items():
             table.setName(value, name_id, 3, 1, 0x409)
         self.font['head'].fontRevision = float(self.version)
+
+    def _declare_scripts(self):
+        """Say which scripts the font is for, so a shaper does not have to guess.
+
+        Read off the alphabet: a font whose letters are Latin declares Latn.
+        """
+        from fontTools.ttLib import newTable
+        scripts = set()
+        for char in self.alphabet:
+            name = unicodedata.name(char, '')
+            if name.startswith('LATIN') and char.isalpha():
+                scripts.add('Latn')
+        if scripts:
+            tags = ','.join(sorted(scripts))
+            table = newTable('meta')
+            table.data = {'dlng': tags, 'slng': tags}
+            self.font['meta'] = table
 
     def _ensure_notdef(self):
         glyph = self.glyf['.notdef']

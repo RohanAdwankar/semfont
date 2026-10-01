@@ -9,6 +9,11 @@
 (* Printable ASCII and Latin-1, plus the punctuation prose actually uses. *)
 (* Everything but U+00AD, the soft hyphen, which Google Fonts asks for no one to ship. *)
 alphabet = " -~\u00a0-¬®-ÿ‘’“”–—…•€™";
+(* Latin Extended-A, which Google Fonts requires of every family, then the few
+   other letters, accents and punctuation in its Latin Core set. *)
+alphabet = "\u0100-\u0107\u010a-\u0113\u0116-\u011b\u011e-\u0123\u0126\u0127\u012a\u012b\u012e-\u0131\u0136\u0137\u0139-\u013e\u0141-\u0148\u0150-\u0155\u0158-\u015b\u015e-\u0161\u0164\u0165\u016a\u016b\u016e-\u017e";
+alphabet = "\u0218-\u021b\u0237\u02c6\u02c7\u02d8-\u02dd\u0300-\u0304\u0306-\u0308\u030a-\u030c\u0326-\u0328";
+alphabet = "\u1e80-\u1e85\u1e9e\u1ef2\u1ef3\u201a\u201e\u2039\u203a\u2212";
 
 (* Every combination of the face attributes below needs a file. *)
 face                  = "LiberationSans-Regular.ttf";
