@@ -1,0 +1,13 @@
+(* A font for unified diffs. The markers stay on the page -- they are part of
+   the line -- so these rules say `keep`. *)
+
+alphabet = " !\"'()[]{},-./0-9:;?@A-Za-z_+*=<>&|#$%^~\\";
+markers  = "";
+
+style added   = color "#1a7f37";
+style removed = color "#cf222e";
+style hunk    = from "LiberationSans-Bold.ttf", color "#8250df";
+
+added   = line_start , "+" , { any } -> added keep;
+removed = line_start , "-" , { any } -> removed keep;
+header  = line_start , "@@" , { any } -> hunk keep;

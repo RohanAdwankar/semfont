@@ -1,0 +1,43 @@
+(* Markdown, as a font. Nothing here is code: the shaper does the parsing.
+
+   Emphasis is written as toggles rather than as brackets, because that is
+   what it is. A closing ** does not have to be matched with the ** that
+   opened it; it turns bold off because bold was on. Five flags is thirty-two
+   states, and the font carries the current one in the glyph stream, so
+   nesting works at any depth with nothing unrolled. *)
+
+(* Printable ASCII and Latin-1, plus the punctuation prose actually uses. *)
+(* Everything but U+00AD, the soft hyphen, which Google Fonts asks for no one to ship. *)
+alphabet = " -~\u00a0-¬®-ÿ‘’“”–—…•€™";
+
+(* Every combination of the face attributes below needs a file. *)
+face                  = "LiberationSans-Regular.ttf";
+face bold             = "LiberationSans-Bold.ttf";
+face italic           = "LiberationSans-Italic.ttf";
+face bold italic      = "LiberationSans-BoldItalic.ttf";
+face mono             = "LiberationMono-Regular.ttf";
+face mono bold        = "LiberationMono-Bold.ttf";
+face mono italic      = "LiberationMono-Italic.ttf";
+face mono bold italic = "LiberationMono-BoldItalic.ttf";
+
+toggle bold   = "**" -> bold;
+toggle italic = "*"  -> italic;
+toggle strike = "~~" -> rule 0.24;
+toggle code   = "`"  -> mono, color "#c0392b";
+
+(* CommonMark: an underscore between word characters is literal, which is
+   what leaves get_user_name alone. *)
+toggle under  = "_"  -> rule -0.11 unless preceded_by word;
+
+(* Headings are not toggles: they run from a line start to the end of the
+   line and never turn off, so they stay span rules. A heading line is not
+   also emphasised. *)
+markers = "*_~`#";
+
+style h1 = from "LiberationSans-Bold.ttf", scale 1.5;
+style h2 = from "LiberationSans-Bold.ttf", scale 1.28;
+style h3 = from "LiberationSans-Bold.ttf", scale 1.12;
+
+heading1 = line_start , "# "  , { any } -> h1 unless starts_with space;
+heading2 = line_start , "## " , { any } -> h2 unless starts_with space;
+heading3 = line_start , "### ", { any } -> h3 unless starts_with space;
