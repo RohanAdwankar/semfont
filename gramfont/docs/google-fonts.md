@@ -17,23 +17,22 @@ directory and have not run. Google Fonts has accepted unusual functional fonts
 before, Wavefont among them, so the idea is not what will be questioned. The
 outlines are all Liberation Sans, and that is.
 
-## One input is missing
+## Where it lives
 
-Google requires the first line of OFL.txt, and nameID 0 in the font, to read
-`Copyright YEAR The Markfont Project Authors (git url)`, with the URL of the
-repository the font is maintained in. That repository does not exist yet, so
-the URL is an argument and nothing here guesses it.
+The font is maintained in this repository, so this repository is the URL in the
+copyright line. `google-fonts/ofl/markfont/` holds the built font and OFL.txt,
+and `google-fonts/prepare.py` regenerates both from `examples/markdown.gram`:
 
 ```
 python3 google-fonts/prepare.py \
-    --repo-url https://github.com/<owner>/<repo> \
+    --repo-url https://github.com/RohanAdwankar/semfont \
     --base /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf
 ```
 
-That writes `google-fonts/ofl/markfont/Markfont-Regular.ttf` and `OFL.txt`,
-then runs the thirteen license and name checks and prints the result of each.
-The Liberation notices are carried on the first line, because Google's checks
-accept changes to that line only and the licence requires the originals.
+It then runs thirteen license and name checks from Google's own fontbakery
+profile and prints the result of each. The Liberation notices are carried on the
+first line of OFL.txt, because Google's checks accept changes to that line only
+and the licence requires the originals.
 
 ## Then
 

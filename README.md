@@ -313,6 +313,14 @@ is fine. Only Chrome was tested.
 
 The whole thing is 148 KB of woff2.
 
+## A Markdown font
+
+`gramfont/` is the compiler behind the second font on the blog: a grammar file
+in, a font out, with no parser at render time. `gramfont/examples/markdown.gram`
+renders Markdown emphasis at any nesting depth, headings, code and strikethrough
+in 110 KB of woff2. See `gramfont/README.md`, and `gramfont/docs/google-fonts.md`
+for what it takes to submit it to Google Fonts.
+
 ## What it gets wrong
 
 Sarcasm, irony, and domain jargon it has not been taught. The lexicons are a
