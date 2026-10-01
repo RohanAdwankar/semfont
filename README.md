@@ -275,6 +275,52 @@ no build step.
 in the browser as-is, using `createElement` rather than JSX so it needs no
 transform. React is a peer, and only `SemanticText.js` imports it.
 
+## As a font file
+
+`font/build.py` bakes the valence channel into an actual `.ttf`, so a plain
+`<div>` with the font set on it comes out coloured with no script on the page.
+Every lexicon word, and every real inflected form of one, is a substitution
+rule inside the font. `COLR` and `CPAL` supply the colour.
+
+```bash
+pip install fonttools wordfreq
+python3 font/build.py --base /path/to/Regular.ttf --out semfont.ttf
+```
+
+It also reproduces the clause pass. A negator (`not`, `never`, `don't`) flips
+the colour of what follows it until the clause ends, a second negator cancels
+the first, and a resolver (`fixed`, `avoided`) turns the harm after it into
+relief. The state rides along in the glyph stream as two bits, so the font
+needs no memory beyond the glyph it is looking at. The lexicon, the theme and
+the negator, resolver and clause-break lists are read out of `src/` at build
+time.
+
+`font/parity.py` measures the result against `analyze()` on the demo passages
+and sixteen sentences written to stress negation. The library colours 60 words
+in them. The font agrees on the sign of 59 and on the exact colour level for 52,
+where a plain word list agrees on the sign of 41. The one wrong sign is "the
+crash is gone", which the library handles by looking backwards.
+
+What it does not do: weight, size, tracking, highlight and slant, which a
+static font cannot vary per word. Intensifiers (`very`, `totally`) are not
+modelled, so those words come out a step lighter than the library's. And in
+Chrome a soft line wrap resets the shaper, so a `not` and the word it negates
+on opposite sides of a wrap colour as if the `not` were absent. Text typed into
+an editable box skips the font's rules in Chrome until something forces a
+reshape, and swapping `font-family` between two equivalent stacks in an `input`
+handler does, without moving the text or the caret. Pasted and script-set text
+is fine. Only Chrome was tested.
+
+The whole thing is 148 KB of woff2.
+
+## A Markdown font
+
+`gramfont/` is the compiler behind the second font on the blog: a grammar file
+in, a font out, with no parser at render time. `gramfont/examples/markdown.gram`
+renders Markdown emphasis at any nesting depth, headings, code and strikethrough
+in 110 KB of woff2. See `gramfont/README.md`. `gramfont/google-fonts/` holds the built
+font and its license, laid out for a Google Fonts submission.
+
 ## What it gets wrong
 
 Sarcasm, irony, and domain jargon it has not been taught. The lexicons are a

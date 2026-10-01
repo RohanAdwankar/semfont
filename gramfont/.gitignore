@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.ttf
+*.woff2
+*.fea
+
+# the submission folder is the one place a built font is kept
+!google-fonts/ofl/**/*.ttf
