@@ -11,6 +11,9 @@ argument rather than a guess.
 The font is built from Liberation Sans, so the upstream notices travel with it,
 on the first line of OFL.txt and in nameID 0. Google's checks want everything
 after that first line to match their template exactly.
+
+Afterwards, run `gftools add-font` against a checkout of google/fonts to write
+METADATA.pb, and open the pull request there.
 """
 import argparse
 import datetime
