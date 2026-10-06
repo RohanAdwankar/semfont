@@ -50,7 +50,7 @@ def run_checks(folder, font):
     installed, fontbakery quietly runs about two thirds of the checks and says
     so only in its last lines, which is how a missing-glyphs failure once
     went unseen. So the count of checks that ran is printed, and a partial
-    run is called out.
+    run is called out and counts as a failure.
     """
     done = subprocess.run(
         ['fontbakery', 'check-googlefonts', font, '-l', 'PASS', '-C', '--no-progress'],
@@ -70,8 +70,15 @@ def run_checks(folder, font):
     summary = ', '.join(f'{len(v)} {k}' for k, v in sorted(found.items())
                         if k in ('PASS', 'WARN', 'FAIL', 'ERROR'))
     print(f'  {ran} checks ran: {summary or "none"}')
+    if ran == 0:
+        # fontbakery can crash before running anything when its optional
+        # packages are missing, and a run of nothing has no failures in it.
+        print('  NO CHECKS RAN: fontbakery crashed or is missing its googlefonts extra.')
+        print('  ' + ' '.join(out.strip().splitlines()[-1:]) [:200])
+        return False
     if "googlefonts' extra" in out:
         print("  PARTIAL RUN: install fontbakery's googlefonts extra, or this misses checks.")
+        return False
     return not found.get('FAIL') and not found.get('ERROR')
 
 

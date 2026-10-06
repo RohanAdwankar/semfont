@@ -1,4 +1,6 @@
 """What the compiler accepts, what it refuses, and what the font then does."""
+import contextlib
+import io
 import os
 import sys
 import unittest
@@ -386,6 +388,35 @@ class SubmissionTest(unittest.TestCase):
             prepare.main(['--repo-url', 'not a url', '--base', str(BASE)])
         self.assertIn('--repo-url', str(caught.exception))
 
+
+    def test_a_run_that_checks_nothing_is_not_a_pass(self):
+        """With fontbakery's optional packages missing it can crash before
+        running a check, or run a partial profile. A run with no failures in it
+        is only a pass if it ran something, so CI cannot go green on nothing."""
+        import stat
+        import tempfile
+        prepare = load_prepare()
+        outputs = {
+            'passes': (' >> a/check\n    Result: PASS\n >> b/check\n    Result: WARN\n', True),
+            'fails': (' >> a/check\n    Result: FAIL\n >> b/check\n    Result: PASS\n', False),
+            'errors': (' >> a/check\n    Result: ERROR\n', False),
+            'crashes': ("ValueError: Check 'googlefonts/x' not found\n", False),
+            'partial': (" >> a/check\n    Result: PASS\nneeds the 'googlefonts' extra\n", False),
+        }
+        for name, (text, expected) in outputs.items():
+            with tempfile.TemporaryDirectory() as tmp:
+                script = os.path.join(tmp, 'fontbakery')
+                with open(script, 'w') as handle:
+                    handle.write("#!/bin/sh\ncat <<'EOF'\n" + text + "EOF\n")
+                os.chmod(script, os.stat(script).st_mode | stat.S_IXUSR)
+                saved = os.environ['PATH']
+                os.environ['PATH'] = tmp + os.pathsep + saved
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        got = prepare.run_checks(tmp, 'x.ttf')
+                finally:
+                    os.environ['PATH'] = saved
+            self.assertEqual(got, expected, name)
 
 if __name__ == '__main__':
     unittest.main()
