@@ -28,12 +28,15 @@ class Atom:
 def classes(alphabet, markers=()):
     """The builtin character classes, resolved against this alphabet.
 
-    Marker characters are excluded from all of them. A class that contained
-    its own closing delimiter would carry the style straight through it.
+    Marker characters are excluded from all of them except `all`. A class that
+    contained its own closing delimiter would carry the style straight through
+    it, so a span that is meant to run over markers has to say so by naming
+    `all`: a line of code is the case, where `*` and `_` are just characters.
     """
     chars = set(alphabet) - set(markers)
     resolved = dict(BUILTIN)
     resolved['any'] = chars
+    resolved['all'] = set(alphabet)
     resolved['space'] = {c for c in chars if c.isspace()}
     resolved['nonspace'] = {c for c in chars if not c.isspace()}
     resolved['word'] = {c for c in chars if c.isalnum()}

@@ -132,7 +132,7 @@ class FontTest(unittest.TestCase):
         source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
         grammar = check_regular(parse(source))
         shapes, _ = plan(grammar)
-        self.assertEqual(len(shapes), 3)   # the three headings; the rest are toggles
+        self.assertEqual(len(shapes), 4)   # three headings and code lines; the rest are toggles
         builder = Builder(grammar, shapes, str(BASE))
         builder.build_glyphs()
         self.assertIn('feature calt', builder.feature())
@@ -294,6 +294,52 @@ class FontTest(unittest.TestCase):
         with self.assertWarns(UserWarning) as caught:
             builder.build_glyphs()
         self.assertIn('U+0237', str(caught.warning))
+
+    def test_an_indented_line_is_code_with_its_markers_left_alone(self):
+        """Shapes real text through HarfBuzz. A code line carries the style over
+        asterisks, underscores and hashes, because in code they are characters,
+        and nothing outside it is touched."""
+        try:
+            import uharfbuzz as hb
+        except ImportError:
+            self.skipTest('uharfbuzz is not installed')
+        import tempfile
+        source = (ROOT / 'examples' / 'markdown.gram').read_text(encoding='utf-8')
+        grammar = check_regular(parse(source))
+        shapes, _ = plan(grammar)
+        builder = Builder(grammar, shapes, str(BASE))
+        builder.build_glyphs()
+        with tempfile.TemporaryDirectory() as tmp:
+            ttf = builder.save(os.path.join(tmp, 'x.ttf'))[0]
+            order = builder.font.getGlyphOrder()
+            font = hb.Font(hb.Face(hb.Blob.from_file_path(ttf)))
+
+            def shaped(text):
+                buf = hb.Buffer()
+                buf.add_str(text)
+                buf.guess_segment_properties()
+                hb.shape(font, buf, {'calt': True})
+                return [order[info.codepoint] for info in buf.glyph_infos]
+
+            line = '    x = a * b _ c # d ~~e~~ `f`'
+            code = shaped(line)
+            self.assertEqual(len(code), len(line), 'a code line hides nothing')
+            self.assertTrue(all(name.endswith('.codeblock') for name in code), code)
+            self.assertTrue(all(name.endswith('.codeblock') for name in shaped('    # comment')),
+                            'the first glyph after the indent may itself be a marker')
+            self.assertFalse(any(n.endswith('.codeblock') for n in shaped('  two spaces *x*')))
+            self.assertTrue(any(n.endswith('.h1') for n in shaped('# Heading')))
+            self.assertFalse(any(n.endswith('.codeblock') for n in shaped('plain **bold** text')))
+
+    def test_all_includes_the_markers_and_any_does_not(self):
+        grammar = check_regular(parse(
+            'alphabet = "a-z *.,>~";\nmarkers = "*";\nstyle b = from "x.ttf";\n'
+            'r = line_start , "> " , { all } -> b;\nq = line_start , "~ " , { punct } -> b;'))
+        _, classes = plan(grammar)
+        self.assertIn('*', classes['all'])
+        self.assertNotIn('*', classes['any'])
+        self.assertEqual(classes['punct'], {'.', ',', '>', '~'},
+                         'punctuation is neither letters nor space, and never a marker')
 
     def test_the_font_saves_and_reloads(self):
         import tempfile

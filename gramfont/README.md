@@ -4,7 +4,7 @@ Write a grammar. Get a font that renders it.
 
 ```
 $ gramfont examples/markdown.gram --base LiberationSans-Regular.ttf -o markfont.ttf
-markfont.ttf 910 KB, markfont.woff2 155 KB
+markfont.ttf 948 KB, markfont.woff2 156 KB
 ```
 
 Set that font on a plain `<div>` of Markdown source and the Markdown renders.
@@ -62,13 +62,29 @@ the state after the flip, and one lookup walking left to right reads its own
 output as backtrack. Depth is not tracked because depth does not matter:
 `*a **b ~~c `d` e~~ f** g*` comes out right, and so would twenty more levels.
 
-Five toggles is 32 states. With headings and the Latin Core character set that is 155 KB of
+Five toggles is 32 states. With headings and the Latin Core character set that is 156 KB of
 woff2, and six toggles is the cap because every state holds a copy of the
 whole alphabet.
 
 An opener needs a non-space after it and a closer needs a non-space before
 it, which is what leaves `2 * 3 * 4` alone. `unless preceded_by word` is what
 leaves `get_user_name` alone.
+
+## Code blocks
+
+An indented line is code, as in CommonMark:
+
+```
+codeline = line_start , "    " , { all } -> codeblock keep;
+```
+
+Each line carries its own four spaces, so each line can be recognised on its
+own, and `{ all }` lets the style go over the asterisks, underscores and hashes
+that are only characters in code. `x = a * b` and `snake_case` stay as written.
+
+A fenced block does not work in Chrome, the only browser tested. Chrome shapes
+each line separately, so a line between two fences has nothing in it that says
+it is code, and the font cannot see the fence from there.
 
 ## What a font cannot parse
 
@@ -114,7 +130,9 @@ toggles, use toggles and the depth stops being a question.
 Expressions are EBNF: `"literal"`, `name`, `a , b`, `a | b`, `[ optional ]`,
 `{ repeated }`, `( grouped )`. The builtin classes are `any`, `letter`,
 `digit`, `word`, `space`, `nonspace`, `punct`, and they never contain a marker
-character. `line_start` anchors a rule to the start of a line.
+character. The exception is `all`, which is every character of the alphabet,
+markers included, for a run that has to go over them. `line_start` anchors a
+rule to the start of a line.
 
 Style properties are `from "some.ttf"` (take the outlines from another font),
 `scale 1.5`, `color "#c0392b"`, and `rule -0.11` (a bar at that height in em,
