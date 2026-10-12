@@ -17,14 +17,20 @@ Three layers, all substitutions:
              "negated" and one for "resolved", so the font needs no memory
              beyond the glyph it is looking at
 
-Only the valence channel is here. Weight, size and tracking are the other
-things semfont renders, and a static font cannot vary them per word.
+Two more channels ride on top of the colour, each cut to one step because a
+static font has one bold and one highlight: a salient word ("critical",
+"deadline") is set in the bold face passed with --bold, and a surprise word
+("suddenly", "oddly") gets a box behind it. Size and tracking are not here;
+the library's weight and highlight ramps are, at a single cut-off each. The
+parts of salience and surprise that come from the passage itself, a rare word
+that keeps coming back or a word much rarer than its neighbours, need the
+whole text and cannot be rules.
 
 The lexicon, the theme, and the negator, resolver and clause-break lists are
 read out of the library at build time, so the font cannot drift from what
 `analyze()` would say. `font/parity.py` measures how closely it agrees.
 
-    python3 font/build.py --out semfont.ttf
+    python3 font/build.py --base Regular.ttf --bold Bold.ttf --out semfont.ttf
 """
 import argparse
 import json
@@ -37,6 +43,7 @@ from fontTools import subset
 from fontTools.colorLib.builder import buildCOLR, buildCPAL
 from fontTools.feaLib.builder import addOpenTypeFeatures
 from fontTools.ttLib import TTFont
+from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib.tables._g_l_y_f import Glyph
 
@@ -205,8 +212,7 @@ def pick_words(valence, threshold, limit, levels):
     about the middle of the range, which is most of the text anyone writes.
     """
     words = [(word, value) for word, value in valence.items()
-             if abs(value) >= threshold and word.isalpha() and word.isascii()
-             and 2 < len(word) <= 14]
+             if abs(value) >= threshold and fits(word)]
     if limit <= 0 or limit >= len(words):
         return sorted(words)
     buckets = {level: [] for level in range(levels)}
@@ -269,8 +275,21 @@ def seed_forms(words, shouted=True):
     return sorted(out, key=lambda f: (-len(f), f))
 
 
+# A word can carry one decoration on top of its colour. Bold is the salience
+# channel (the theme's weight row), the highlight is the surprise channel (its
+# highlight row). A static font has one bold and one highlight, so each is a
+# cut-off on the lexicon value rather than the library's continuous ramp.
+DECOS = ('', 'b', 'h')
+
+
+def fits(word):
+    """A word the font can carry a rule for."""
+    return word.isalpha() and word.isascii() and 2 < len(word) <= 14
+
+
 def build(base_path, words, palette, threshold, levels, out_path, family,
-          keep_names=False, resolvers=(), negators=(), clause_words=()):
+          keep_names=False, resolvers=(), negators=(), clause_words=(),
+          bold_path=None, bold_words=(), highlight_words=(), highlight=None):
     font = TTFont(base_path)
     options = subset.Options()
     options.layout_features = []      # the calt below is built from scratch
@@ -286,6 +305,7 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
     glyf, hmtx = font['glyf'], font['hmtx']
     order, colr, added = font.getGlyphOrder()[:], {}, []
     cmap = font.getBestCmap()
+    upm = font['head'].unitsPerEm
     lifted = levels * 2      # a slot no context can repaint: see the resolver rules
     slots = range(levels * 2 + 1)
     palette = list(palette) + [palette[levels]]   # same colour as the first positive slot
@@ -294,6 +314,17 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
                if cp < 0x7F or cp in (0xA0, 0x2018, 0x2019, 0x201C, 0x201D, 0x2013, 0x2014, 0x2026)}
     carriers = [c for c in name_of if c not in BREAKERS and c >= ' ']
     non_letters = [c for c in carriers if c not in letters]
+
+    bold = None
+    if bold_path and bold_words:
+        bold = TTFont(bold_path)
+        if bold['head'].unitsPerEm != upm:
+            raise SystemExit('the bold face must share the base font\'s units per em')
+        bold_cmap, bold_set = bold.getBestCmap(), bold.getGlyphSet()
+    decos = [''] + (['b'] if bold else []) + (['h'] if highlight and highlight_words else [])
+    HL = len(palette)
+    if 'h' in decos:
+        palette.append(highlight)
 
     def shell(name, like):
         empty = Glyph()
@@ -313,73 +344,136 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
         hmtx[name] = hmtx[base]
         added.append(name)
 
-    # State 0: a letter painted a colour. A COLR glyph paints layers from the
-    # palette, so it needs no outline of its own: an empty glyph pointing back
-    # at the plain letter is enough.
-    def painted(char, slot, state):
-        suffix = f'x{state}' if state else ''
-        return f'{name_of[char]}.c{slot}{suffix}'
+    def copy_bold(char):
+        """The bold face's outline for `char`, flattened, as `<glyph>.b`."""
+        name = name_of[char] + '.b'
+        source = bold_cmap.get(ord(char))
+        if source is None:
+            alias(name, name_of[char])
+            return
+        recording = DecomposingRecordingPen(bold_set)
+        bold_set[source].draw(recording)
+        pen = TTGlyphPen(None)
+        recording.replay(pen)
+        glyf[name] = pen.glyph()
+        hmtx[name] = bold['hmtx'][source]
+        added.append(name)
 
-    def plain(char, state):
-        return name_of[char] if not state else f'{name_of[char]}.x{state}'
+    rects = set()
 
+    def rect(advance):
+        """A box the width of one glyph, from below the descender to above the
+        x-height, which is what the library's padded background covers. It
+        runs a little past both sides so neighbouring boxes overlap: the paint
+        is opaque, and butted edges leave hairline seams at fractional pixels."""
+        name = f'hl.{advance}'
+        if name not in rects:
+            low, high = -int(0.22 * upm), int(0.80 * upm)
+            over = int(0.04 * upm)
+            pen = TTGlyphPen(None)
+            pen.moveTo((-over, low))
+            pen.lineTo((-over, high))
+            pen.lineTo((advance + over, high))
+            pen.lineTo((advance + over, low))
+            pen.closePath()
+            glyf[name] = pen.glyph()
+            hmtx[name] = (advance, 0)
+            added.append(name)
+            rects.add(name)
+        return name
+
+    # Names. A letter is `a`; bold `a.b`; highlighted `a.h`; painted in colour
+    # slot 3 `a.c3` (or `a.b.c3`); carrying clause state 1 `a.x1` or `a.c3x1`.
+    def outline(char, deco):
+        return name_of[char] + ('.b' if deco == 'b' else '')
+
+    def plain(char, state, deco=''):
+        return name_of[char] + ('.' + deco if deco else '') + (f'.x{state}' if state else '')
+
+    def painted(char, slot, state, deco=''):
+        return name_of[char] + ('.' + deco if deco else '') + f'.c{slot}' + (f'x{state}' if state else '')
+
+    def layers(char, slot, deco):
+        out = []
+        if deco == 'h':
+            out.append((rect(hmtx[name_of[char]][0]), HL))
+        out.append((outline(char, deco), 0xFFFF if slot is None else slot))
+        return out
+
+    # Every variant of a letter sits next to the others in the glyph order, so
+    # the classes below compress to a handful of ranges instead of long lists.
     for char in letters:
-        for slot in slots:
-            shell(painted(char, slot, 0), name_of[char])
-            colr[painted(char, slot, 0)] = [(name_of[char], slot)]
-    # States 1-3: every carrier again, and every painted letter again, so the
-    # state can travel through both a coloured word and a plain one.
+        if bold:
+            copy_bold(char)
+        for deco in decos:
+            for state in STATES:
+                if deco == 'h':
+                    shell(plain(char, state, deco), name_of[char])
+                    colr[plain(char, state, deco)] = layers(char, None, deco)
+                elif state:
+                    alias(plain(char, state, deco), outline(char, deco))
+                for slot in slots:
+                    shell(painted(char, slot, state, deco), outline(char, deco))
+                    colr[painted(char, slot, state, deco)] = layers(char, slot, deco)
+    # The state has to travel through spaces and punctuation too.
     for state in STATES[1:]:
-        for char in carriers:
+        for char in non_letters:
             alias(plain(char, state), name_of[char])
-        for char in letters:
-            for slot in slots:
-                shell(painted(char, slot, state), name_of[char])
-                colr[painted(char, slot, state)] = [(name_of[char], slot)]
 
     font.setGlyphOrder(order + added)
     font['maxp'].numGlyphs = len(order) + len(added)
     font['COLR'] = buildCOLR(colr)
-    font['CPAL'] = buildCPAL([[(r / 255, g / 255, b / 255, 1.0)
-                               for r, g, b in palette]])
+
+    def rgba(entry):
+        r, g, b = entry[:3]
+        return (r / 255, g / 255, b / 255, entry[3] if len(entry) > 3 else 1.0)
+    font['CPAL'] = buildCPAL([[rgba(entry) for entry in palette]])
 
     # ---- the rules
     def cls(glyphs):
         return '[%s]' % ' '.join(glyphs)
 
     def letter_glyphs(state):
-        return [plain(c, state) for c in letters] + [
-            painted(c, k, state) for c in letters for k in slots]
+        return [plain(c, state, d) for c in letters for d in decos] + [
+            painted(c, k, state, d) for c in letters for d in decos for k in slots]
 
     def carrier_glyphs(state):
         return letter_glyphs(state) + [plain(c, state) for c in non_letters]
 
     fea = []
-    fea.append('@Letter = %s;' % cls(list(letters)))
+    fea.append('@Letter = %s;' % cls(letter_glyphs(0)))
     fea.append('@AnyLetter = %s;' % cls(g for st in STATES for g in letter_glyphs(st)))
     fea.append('@NonLetter = %s;' % cls(name_of[c] for c in name_of if c not in letters))
     for state in STATES:
         fea.append(f'@Car{state} = {cls(carrier_glyphs(state))};')
-    for slot in slots:
-        fea.append(f'lookup CLR{slot} {{')
-        fea += [f'  sub {char} by {painted(char, slot, 0)};' for char in letters]
-        fea.append(f'}} CLR{slot};')
+    for deco in decos:
+        if deco:
+            fea.append(f'lookup DECO_{deco} {{')
+            fea += [f'  sub {name_of[char]} by {plain(char, 0, deco)};' for char in letters]
+            fea.append(f'}} DECO_{deco};')
+        for slot in slots:
+            fea.append(f'lookup CLR{deco}{slot} {{')
+            fea += [f'  sub {name_of[char]} by {painted(char, slot, 0, deco)};' for char in letters]
+            fea.append(f'}} CLR{deco}{slot};')
 
     # Moving a glyph into a state. A painted letter is repainted on the way in:
     # negation flips its sign and softens it, a resolver turns harm into relief,
-    # and a word that ends up below the threshold is left plain.
+    # and a word that ends up below the threshold is left plain. Bold and the
+    # highlight ride along untouched.
     for state in STATES[1:]:
         fea.append(f'lookup IN{state} {{')
-        for char in letters:
-            fea.append(f'  sub {name_of[char]} by {plain(char, state)};')
-            for slot in slots:
-                if slot == lifted:
-                    target = painted(char, lifted, state)
-                else:
-                    moved = slot_of(after_context(bin_value(slot, threshold, levels), state),
-                                    threshold, levels)
-                    target = plain(char, state) if moved is None else painted(char, moved, state)
-                fea.append(f'  sub {painted(char, slot, 0)} by {target};')
+        for deco in decos:
+            for char in letters:
+                fea.append(f'  sub {plain(char, 0, deco)} by {plain(char, state, deco)};')
+                for slot in slots:
+                    if slot == lifted:
+                        target = painted(char, lifted, state, deco)
+                    else:
+                        moved = slot_of(after_context(bin_value(slot, threshold, levels), state),
+                                        threshold, levels)
+                        target = (plain(char, state, deco) if moved is None
+                                  else painted(char, moved, state, deco))
+                    fea.append(f'  sub {painted(char, slot, 0, deco)} by {target};')
         for char in non_letters:
             fea.append(f'  sub {name_of[char]} by {plain(char, state)};')
         fea.append(f'}} IN{state};')
@@ -390,27 +484,40 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
     # state the word starts in, painted in a slot no later state can repaint.
     for state in STATES:
         fea.append(f'lookup LIFT{state} {{')
-        for char in letters:
-            fea.append(f'  sub {plain(char, 0)} by {painted(char, lifted, state)};')
-            for slot in range(levels * 2):
-                value = bin_value(slot, threshold, levels)
-                if state & NEGATED:
-                    value = -value * NEGATION_DAMPING
-                moved = lifted if value <= 0 else slot_of(value, threshold, levels)
-                target = plain(char, state) if moved is None else painted(char, moved, state)
-                fea.append(f'  sub {painted(char, slot, 0)} by {target};')
+        for deco in decos:
+            for char in letters:
+                fea.append(f'  sub {plain(char, 0, deco)} by {painted(char, lifted, state, deco)};')
+                for slot in range(levels * 2):
+                    value = bin_value(slot, threshold, levels)
+                    if state & NEGATED:
+                        value = -value * NEGATION_DAMPING
+                    moved = lifted if value <= 0 else slot_of(value, threshold, levels)
+                    target = (plain(char, state, deco) if moved is None
+                              else painted(char, moved, state, deco))
+                    fea.append(f'  sub {painted(char, slot, 0, deco)} by {target};')
         fea.append(f'}} LIFT{state};')
 
     # -- layer 1: words
+    entries = {word: [slot_of(value, threshold, levels), ''] for word, value in words}
+    for deco, chosen in (('b', bold_words), ('h', highlight_words)):
+        if deco not in decos:
+            continue
+        for word in chosen:
+            entries.setdefault(word, [None, ''])[1] = deco
     fea.append('lookup WORDS {')
     # Longest word first. An `ignore` rule for "broke" matches "broken" (it is
     # followed by a letter) and ends the lookup at that position, so a shorter
     # word listed earlier silently shadows every longer word it begins.
-    for word, value in sorted(words, key=lambda wv: (-len(wv[0]), wv[0])):
-        slot = slot_of(value, threshold, levels)
-        for form in sorted({word, word.capitalize()}):
+    for word, (slot, deco) in sorted(entries.items(), key=lambda e: (-len(e[0]), e[0])):
+        if slot is None and not deco:
+            continue
+        lookup = f'CLR{deco}{slot}' if slot is not None else f'DECO_{deco}'
+        forms = {word, word.capitalize()}
+        if deco:
+            forms.add(word.upper())     # WARNING: a shouted word is still salient
+        for form in sorted(forms):
             bare = ' '.join(c + Q for c in form)
-            marked = ' '.join(f'{c}{Q} lookup CLR{slot}' for c in form)
+            marked = ' '.join(f'{c}{Q} lookup {lookup}' for c in form)
             # A word only counts on its own. Without these two the rule fires
             # inside longer words and "badge" comes out as red "bad" plus "ge".
             fea.append(f'  ignore sub @Letter {bare};')
@@ -422,7 +529,8 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
     def word_class(char, state):
         """One position of a word: the letter as plain or painted, in a state."""
         if char in letters:
-            return cls([plain(char, state)] + [painted(char, k, state) for k in slots])
+            return cls([plain(char, state, d) for d in decos]
+                       + [painted(char, k, state, d) for d in decos for k in slots])
         return cls([plain(char, state)])
 
     def spelled(form, state):
@@ -503,6 +611,13 @@ def main(argv=None):
                          'starts at zero, which on a thin face reads as black')
     ap.add_argument('--negative', help='override the theme accent for bad words, oklch(...)')
     ap.add_argument('--positive', help='override the theme accent for good words, oklch(...)')
+    ap.add_argument('--bold', help='a bold cut of the base face; salient words are set in it')
+    ap.add_argument('--bold-weight', type=int, default=520,
+                    help='a word goes bold when the theme would set this font-weight or more')
+    ap.add_argument('--highlight-at', type=float, default=0.5,
+                    help='a word is highlighted at this surprise value or more; 0 turns it off')
+    ap.add_argument('--highlight-alpha', type=float, default=0.32,
+                    help='strength of the highlight behind a word, as an opacity over white')
     ap.add_argument('--names', action='store_true',
                     help='keep glyph names, so font/parity.py can read what the shaper chose')
     args = ap.parse_args(argv)
@@ -518,6 +633,33 @@ def main(argv=None):
         valence = with_inflections(valence)
     words = pick_words(valence, threshold, args.limit, args.levels)
 
+    theme = from_node('theme', f'm.themes[{args.theme!r}]')
+
+    def row_for(channel, render):
+        return next((r for r in theme['map'] if r['channel'] == channel and r['render'] == render), None)
+
+    bold_words, highlight_words, highlight = set(), set(), None
+    weight = row_for('salience', 'weight')
+    if args.bold and weight:
+        cut = theme['thresholds'].get('salience', 0.3)
+        salience = from_node('lexicon', 'm.SALIENCE')
+        if not args.exact_only:
+            salience = with_inflections(salience, 'SALIENCE')
+        bold_words = {w for w, v in salience.items() if fits(w) and
+                      weight.get('base', 400) + strength(v, cut) * weight.get('range', 300) >= args.bold_weight}
+    paint = row_for('surprise', 'highlight')
+    if args.highlight_at > 0 and paint:
+        surprise = from_node('lexicon', 'm.SURPRISE')
+        if not args.exact_only:
+            surprise = with_inflections(surprise, 'SURPRISE')
+        highlight_words = {w for w, v in surprise.items() if fits(w) and v >= args.highlight_at}
+        # The library paints a translucent box. Translucent boxes drawn glyph by
+        # glyph show their seams, so the font's box is opaque: the theme colour
+        # at that opacity over white, which is the page this font is for.
+        yellow = parse_oklch(paint['color'])
+        a = max(0.0, min(1.0, args.highlight_alpha))
+        highlight = tuple(round(255 + (c - 255) * a) for c in yellow)
+
     lists = library_lists()
     resolvers = []
     if not args.no_clauses:
@@ -527,9 +669,12 @@ def main(argv=None):
         args.base, words, palette, threshold, args.levels, args.out, args.family,
         keep_names=args.names, resolvers=resolvers,
         negators=[] if args.no_clauses else lists['negators'],
-        clause_words=[] if args.no_clauses else lists['clauseWords'])
+        clause_words=[] if args.no_clauses else lists['clauseWords'],
+        bold_path=args.bold, bold_words=bold_words, highlight_words=highlight_words,
+        highlight=highlight)
     negative = sum(1 for _, value in words if value < 0)
-    print(f'{len(words)} words ({negative} negative) of {len(valence)} in the lexicon')
+    print(f'{len(words)} words ({negative} negative) of {len(valence)} in the lexicon, '
+          f'{len(bold_words)} bold, {len(highlight_words)} highlighted')
     print(f'{ttf} {os.path.getsize(ttf) // 1024} KB, '
           f'{woff2} {os.path.getsize(woff2) // 1024} KB')
     return 0
