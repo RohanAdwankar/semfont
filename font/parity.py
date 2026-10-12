@@ -38,6 +38,7 @@ CURATED = [
     "The project failed, and we lost weeks, but the lessons were valuable.",
     "Corrupting data is bad. Recovering from it is hard.",
     "He was hating every minute and loving none of it.",
+    "Production was not\u00a0clean, and the fix was not\u00a0painful.",
 ]
 
 

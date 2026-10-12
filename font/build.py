@@ -436,7 +436,10 @@ def build(base_path, words, palette, threshold, levels, out_path, family,
     # reason as above: "cannot" ends in "not".
     seeds = [(form, 'flip') for form in seed_forms(negators) if glyph_ok(form)]
     seeds += [(form, 'set') for form in seed_forms(resolvers, shouted=False) if glyph_ok(form)]
-    space = name_of[' ']
+    # A no-break space is still the space after "not". The library's tokenizer
+    # treats it as whitespace, and it is what a page uses to keep "not" on the
+    # same line as the word it negates, which is the one place this font needs it.
+    space = cls([name_of[' '], name_of['\u00a0']])
     for form, kind in sorted(seeds, key=lambda fs: (-len(fs[0]), fs[0])):
         if kind == 'set':
             # Paint the resolver while its letters are still unassigned, in the
