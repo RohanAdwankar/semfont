@@ -211,22 +211,32 @@ class Builder:
         scale = float(props.get('scale', 1.0)) * (self.upem / upem)
         bar = props.get('rule')
         colour = props.get('color')
+        missing = []
         for c in self.alphabet:
             base = self.name[c]
             target = f'{base}.{style}'
             src_name = cmap.get(ord(c))
+            glyphset, face_hmtx, face_scale = source, hmtx, scale
             if src_name is None:
-                raise GrammarError(
-                    f'style {style}: its font has no glyph for {c!r}')
-            transform = Transform().scale(scale) if scale != 1 else None
-            advance = round(hmtx[src_name][0] * scale)
+                # A face that lacks one character falls back to the base font's
+                # glyph for it, as toggle faces do, rather than refusing to build.
+                missing.append(c)
+                glyphset, src_name = self.font.getGlyphSet(), base
+                face_hmtx, face_scale = self.font['hmtx'], 1.0
+            transform = Transform().scale(face_scale) if face_scale != 1 else None
+            advance = round(face_hmtx[src_name][0] * face_scale)
             box = None
             if bar is not None:
                 y = round(float(bar) * self.upem)
                 box = (0, y, advance, y + round(self.upem * BAR_THICKNESS))
-            self.glyf[target] = redraw(source, src_name, transform, box)
+            self.glyf[target] = redraw(glyphset, src_name, transform, box)
             self.hmtx[target] = (advance, 0)
             self.added.append(target)
+        if missing:
+            warnings.warn(
+                f'style {style}: its font has no glyph for '
+                + ' '.join(f'U+{ord(c):04X}' for c in missing)
+                + "; the base font's is used instead", stacklevel=2)
         if colour:
             self._paint(style, colour)
 
@@ -362,7 +372,10 @@ class Builder:
         # A style that carries across markers has to recognise its own styled
         # markers as backtrack too, or the run stops at the first one.
         carries = bool(host) or self._hosts_a_nest(shape.rule.style)
-        behind = f'@All_{style}' if carries else f'@Any_{style}'
+        # A run over `all` styles marker characters too. The style then has to
+        # be recognised on those glyphs as well, or it stops at the first `*`.
+        wide = self._runs_over_markers(shape)
+        behind = f'@All_{style}' if (carries or wide) else f'@Any_{style}'
         # The closing marker looks exactly like the opening one. Without this
         # the rule re-seeds on it and the span never ends.
         backtracks.append(behind)
@@ -387,7 +400,9 @@ class Builder:
                 rules.append(join('ignore sub', behind,
                                   closer[0] + Q, *closer[1:]) + ';')
             rules.append(join('sub', *prefix, seed + Q, f'lookup {writer}') + ';')
-            over = f'@All_{host}' if host else ('@All' if carries else '@Any')
+            over = (f'@All_{host}' if host else
+                    '@All' if carries else
+                    self.cls(set(shape.body[0].chars)) if wide else '@Any')
             rules.append(f'sub {behind} {over}{Q} lookup {writer};')
         else:
             marked = [f'{chars_cls(a.chars)}{Q} lookup {writer}' for a in shape.body]
@@ -412,6 +427,11 @@ class Builder:
         for style in self.grammar.styles:
             of(style)
         return depth
+
+    def _runs_over_markers(self, shape):
+        """Does this span's run go over marker characters, as a code line does?"""
+        return bool(shape.spans and any(
+            a.kind == RUN and set(a.chars) - set(self.text) for a in shape.body))
 
     def _longer_openers(self, shape):
         """Other rules' opening markers that begin with this one's closer."""
@@ -485,7 +505,10 @@ class Builder:
             opening = ' '.join(
                 f'{self.name[next(iter(a.chars))]}{Q} lookup TO_{style}'
                 for a in shape.prefix)
-            kept.append(f'  sub {opening} @Any_{style};')
+            # The glyph that proves the line is styled can itself be a marker
+            # character when the run goes over them: `    # comment` in code.
+            neighbour = f'@All_{style}' if self._runs_over_markers(shape) else f'@Any_{style}'
+            kept.append(f'  sub {opening} {neighbour};')
         if kept:
             lines.append('lookup MARK {')
             lines += kept

@@ -18,6 +18,8 @@ BUILTIN = {
     'word': None,           # letters and digits
     'letter': None,
     'digit': set('0123456789'),
+    'punct': None,
+    'all': None,            # every character of the alphabet, markers included
 }
 # Not classes: they match a position, not a glyph.
 ANCHORS = {'line_start'}

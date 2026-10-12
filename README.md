@@ -317,8 +317,8 @@ The whole thing is 148 KB of woff2.
 
 `gramfont/` is the compiler behind the second font on the blog: a grammar file
 in, a font out, with no parser at render time. `gramfont/examples/markdown.gram`
-renders Markdown emphasis at any nesting depth, headings, code and strikethrough
-in 155 KB of woff2. See `gramfont/README.md`. `gramfont/google-fonts/` holds the built
+renders Markdown emphasis at any nesting depth, headings, inline code, indented
+code blocks and strikethrough in 156 KB of woff2. See `gramfont/README.md`. `gramfont/google-fonts/` holds the built
 font and its license, laid out for a Google Fonts submission.
 
 ## What it gets wrong

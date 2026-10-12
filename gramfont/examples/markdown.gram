@@ -46,3 +46,12 @@ style h3 = from "LiberationSans-Bold.ttf", scale 1.12;
 heading1 = line_start , "# "  , { any } -> h1 unless starts_with space;
 heading2 = line_start , "## " , { any } -> h2 unless starts_with space;
 heading3 = line_start , "### ", { any } -> h3 unless starts_with space;
+
+(* Code blocks. A fenced block does not work in Chrome, which shapes each line
+   separately, so nothing after an opening fence can know it is inside one.
+   An indented block can, because every line says so itself, and four spaces
+   is what CommonMark calls code anyway. `all` lets the run go over the
+   asterisks and underscores that are only characters in code. *)
+style codeblock = from "LiberationMono-Regular.ttf", color "#2c3e50";
+
+codeline = line_start , "    " , { all } -> codeblock keep;
