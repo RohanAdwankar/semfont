@@ -38,6 +38,7 @@ CURATED = [
     "The project failed, and we lost weeks, but the lessons were valuable.",
     "Corrupting data is bad. Recovering from it is hard.",
     "He was hating every minute and loving none of it.",
+    "Production was not\u00a0clean, and the fix was not\u00a0painful.",
 ]
 
 
@@ -87,22 +88,31 @@ class Shaper:
         self.names = {i: self.font.glyph_to_string(i)
                       for i in range(self.face.glyph_count)}
 
-    def slots(self, text):
+    def shape(self, text):
+        """Per input character: its colour slot (None where uncoloured) and
+        its decoration ('b' bold, 'h' highlighted, '' neither)."""
         levels = self.levels
-        """One colour slot per input character, None where it is uncoloured."""
         buf = hb.Buffer()
         buf.add_str(text)
         buf.guess_segment_properties()
         hb.shape(self.font, buf, {'calt': True, 'liga': False, 'kern': False})
-        slot_of = [None] * len(text)
+        slot_of, deco_of = [None] * len(text), [''] * len(text)
         for info in buf.glyph_infos:
             name = self.names[info.codepoint]
+            if info.cluster >= len(text):
+                continue
             m = re.search(r'\.c(\d+)(?:x\d)?$', name)
-            if m and info.cluster < len(text):
+            if m:
                 # the slot reserved for resolvers paints the first positive colour
                 slot = int(m.group(1))
                 slot_of[info.cluster] = levels if slot >= 2 * levels else slot
-        return slot_of
+            d = re.search(r'\.([bh])(?:\.|$)', name)
+            if d:
+                deco_of[info.cluster] = d.group(1)
+        return slot_of, deco_of
+
+    def slots(self, text):
+        return self.shape(text)[0]
 
 
 def expected_slot(valence, threshold, levels):
@@ -127,15 +137,36 @@ def main(argv=None):
     ap.add_argument('--show', type=int, default=25, help='how many disagreements to print')
     ap.add_argument('--readme', action='store_true',
                     help='also use the README prose (its own numbers change the corpus, so off by default)')
+    ap.add_argument('--bold-weight', type=int, default=520,
+                    help='the font-weight at which the font goes bold; what build.py was given')
+    ap.add_argument('--highlight-at', type=float, default=0.5,
+                    help='the surprise value at which the font highlights; what build.py was given')
     args = ap.parse_args(argv)
 
     sentences = CURATED + demo_passages() + (prose_from_readme() if args.readme else [])
     shaper = Shaper(args.font, args.levels)
     tally = dict(both_plain=0, exact=0, same_sign=0, wrong_sign=0, missed=0, extra=0)
+    deco = {'b': dict(both=0, lib_only=0, font_only=0), 'h': dict(both=0, lib_only=0, font_only=0)}
+    deco_misses = []
     misses = []
     for record in reference(sentences):
-        slots = shaper.slots(record['text'])
+        slots, decos = shaper.shape(record['text'])
         for word in record['words']:
+            # the editorial theme: weight 400 + strength * 300 past a 0.3 threshold,
+            # a highlight past 0.35. The font cuts each at one value.
+            sal = max(0.0, (word['salience'] - 0.3) / 0.7)
+            want_deco = {'b': 400 + sal * 300 >= args.bold_weight,
+                         'h': word['surprise'] >= args.highlight_at}
+            got_deco = decos[word['start']] if word['start'] < len(decos) else ''
+            for kind in 'bh':
+                lib, font = want_deco[kind], got_deco == kind
+                if lib and font:
+                    deco[kind]['both'] += 1
+                elif lib or font:
+                    deco[kind]['lib_only' if lib else 'font_only'] += 1
+                    deco_misses.append((kind, 'library' if lib else 'font', word['text'],
+                                        word['salience'] if kind == 'b' else word['surprise'],
+                                        record['text']))
             want = expected_slot(word['valence'], args.threshold, args.levels)
             got = slots[word['start']] if word['start'] < len(slots) else None
             if want is None and got is None:
@@ -166,6 +197,13 @@ def main(argv=None):
     order = {'wrong_sign': 0, 'missed': 1, 'extra': 2, 'same_sign': 3}
     for kind, text, val, want, got, sentence in sorted(misses, key=lambda m: order[m[0]])[:args.show]:
         print(f"  {kind:10} {text:14} lib {val:+.2f} slot {want}  font slot {got}   | {sentence[:70]}")
+    for kind, label in (('b', 'bold'), ('h', 'highlighted')):
+        d = deco[kind]
+        print(f"words {label} by both: {d['both']}; by the library only: {d['lib_only']}; "
+              f"by the font only: {d['font_only']}")
+    for kind, who, text, val, sentence in deco_misses[:args.show]:
+        print(f"  {'bold' if kind == 'b' else 'highlight':10} {who:8} only  {text:14} "
+              f"lib {val:.2f}   | {sentence[:60]}")
     return 0
 
 

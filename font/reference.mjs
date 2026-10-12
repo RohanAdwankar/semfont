@@ -8,6 +8,7 @@ const out = JSON.parse(input).map((text) => ({
   text,
   words: analyze(text).tokens
     .filter((t) => t.kind === 'word')
-    .map((t) => ({ text: t.text, start: t.start, norm: t.norm, valence: t.valence })),
+    .map((t) => ({ text: t.text, start: t.start, norm: t.norm, valence: t.valence,
+                   salience: t.salience, surprise: t.surprise })),
 }));
 process.stdout.write(JSON.stringify(out));

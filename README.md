@@ -284,8 +284,20 @@ rule inside the font. `COLR` and `CPAL` supply the colour.
 
 ```bash
 pip install fonttools wordfreq
-python3 font/build.py --base /path/to/Regular.ttf --out semfont.ttf
+python3 font/build.py --base /path/to/Regular.ttf --bold /path/to/Bold.ttf --out semfont.ttf
 ```
+
+Two more channels ride on the colour. A salient word (`critical`, `deadline`,
+`production`) is set in the bold face, and a surprise word (`suddenly`,
+`oddly`) gets a box behind it. Each is one step rather than the library's
+ramp, because a static font has one bold and one highlight: `--bold-weight`
+and `--highlight-at` say where the cut falls.
+
+The theme's colours start at the ink and mix toward the accent as a word gets
+stronger, which on a thin face leaves mild words looking black. `--floor 0.55`
+gives every coloured letter at least that share of the accent, and
+`--negative`/`--positive` take an `oklch(...)` to replace the theme's accents.
+A medium weight base helps more than any colour does.
 
 It also reproduces the clause pass. A negator (`not`, `never`, `don't`) flips
 the colour of what follows it until the clause ends, a second negator cancels
@@ -301,9 +313,12 @@ in them. The font agrees on the sign of 59 and on the exact colour level for 52,
 where a plain word list agrees on the sign of 41. The one wrong sign is "the
 crash is gone", which the library handles by looking backwards.
 
-What it does not do: weight, size, tracking, highlight and slant, which a
-static font cannot vary per word. Intensifiers (`very`, `totally`) are not
-modelled, so those words come out a step lighter than the library's. And in
+What it does not do: size, tracking and slant, and the parts of salience and
+surprise that come from the passage rather than the word. The library bolds a
+rare word that keeps coming back and highlights a word much rarer than its
+neighbours; both need the whole text, so the font only has the lexicon's share
+of each channel. Intensifiers (`very`, `totally`) are not modelled, so those
+words come out a step lighter than the library's. And in
 Chrome a soft line wrap resets the shaper, so a `not` and the word it negates
 on opposite sides of a wrap colour as if the `not` were absent. Text typed into
 an editable box skips the font's rules in Chrome until something forces a
