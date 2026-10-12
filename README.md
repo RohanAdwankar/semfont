@@ -287,6 +287,12 @@ pip install fonttools wordfreq
 python3 font/build.py --base /path/to/Regular.ttf --out semfont.ttf
 ```
 
+The theme's colours start at the ink and mix toward the accent as a word gets
+stronger, which on a thin face leaves mild words looking black. `--floor 0.55`
+gives every coloured letter at least that share of the accent, and
+`--negative`/`--positive` take an `oklch(...)` to replace the theme's accents.
+A medium weight base helps more than any colour does.
+
 It also reproduces the clause pass. A negator (`not`, `never`, `don't`) flips
 the colour of what follows it until the clause ends, a second negator cancels
 the first, and a resolver (`fixed`, `avoided`) turns the harm after it into

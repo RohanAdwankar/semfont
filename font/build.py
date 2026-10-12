@@ -498,13 +498,20 @@ def main(argv=None):
                     help='only the lexicon entries themselves, no inflected forms')
     ap.add_argument('--no-clauses', action='store_true',
                     help='words only: no negation or resolver state')
+    ap.add_argument('--floor', type=float, default=0.0,
+                    help='least share of the accent in any coloured letter, 0..1; the library '
+                         'starts at zero, which on a thin face reads as black')
+    ap.add_argument('--negative', help='override the theme accent for bad words, oklch(...)')
+    ap.add_argument('--positive', help='override the theme accent for good words, oklch(...)')
     ap.add_argument('--names', action='store_true',
                     help='keep glyph names, so font/parity.py can read what the shaper chose')
     args = ap.parse_args(argv)
 
     threshold, row = read_theme(args.theme)
-    accents = (parse_oklch(row['negative']), parse_oklch(row['positive']))
-    palette = [mix(accent, ((level + 0.5) / args.levels) * row.get('max', 1.0))
+    accents = (parse_oklch(args.negative or row['negative']),
+               parse_oklch(args.positive or row['positive']))
+    floor = max(0.0, min(1.0, args.floor))
+    palette = [mix(accent, floor + (1 - floor) * ((level + 0.5) / args.levels) * row.get('max', 1.0))
                for accent in accents for level in range(args.levels)]
     valence = from_node('lexicon', 'm.VALENCE')
     if not args.exact_only:
